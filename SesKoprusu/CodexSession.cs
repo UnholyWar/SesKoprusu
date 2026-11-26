@@ -6,12 +6,34 @@ namespace SesKoprusu;
 
 internal static class CodexSession
 {
+    public static string? FindCli()
+    {
+        var folders = new List<string> { AppContext.BaseDirectory };
+        if (Local.Has("cli") && Local.Read<string>("cli") is string chosen && Path.IsPathFullyQualified(chosen) && File.Exists(chosen)) return chosen;
+        folders.AddRange((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator));
+        folders.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm"));
+        foreach (var raw in folders)
+        {
+            var dir = raw.Trim().Trim('"');
+            if (!Path.IsPathFullyQualified(dir)) continue;
+            var direct = Path.Combine(dir, "codex.exe");
+            if (File.Exists(direct)) return direct;
+            var vendor = Path.Combine(dir, "node_modules", "@openai", "codex");
+            foreach (var root in new[] { vendor, Path.Combine(vendor, "node_modules", "@openai", "codex-win32-x64"), Path.Combine(vendor, "node_modules", "@openai", "codex-win32-arm64") })
+                foreach (var arch in new[] { "x86_64", "aarch64" })
+                {
+                    var binary = Path.Combine(root, "vendor", arch + "-pc-windows-msvc", "codex", "codex.exe");
+                    if (File.Exists(binary)) return binary;
+                }
+        }
+        return null;
+    }
+
     static async Task<(int Code, string Output, string Error)> Run(string[] args, CancellationToken token, string? prompt = null, bool interactive = false)
     {
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SesKoprusu");
         var work = Directory.CreateDirectory(Path.Combine(root, "session")).FullName;
-        var exe = Path.Combine(AppContext.BaseDirectory, "codex.exe");
-        if (!File.Exists(exe)) throw new FileNotFoundException("Codex bileşeni bulunamadı. SesKöprüsü kurulumunu yenileyin.");
+        var exe = FindCli() ?? throw new InvalidOperationException("Codex Ayarları üzerinden CLI bileşenini seçin.");
         var info = new ProcessStartInfo(exe)
         {
             UseShellExecute = false, WorkingDirectory = work, CreateNoWindow = !interactive,
