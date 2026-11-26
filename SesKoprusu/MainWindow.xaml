@@ -1,12 +1,16 @@
-﻿<Window x:Class="SesKoprusu.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:SesKoprusu"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
-
-    </Grid>
+<Window x:Class="SesKoprusu.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SesKöprüsü" Width="600" Height="560" Closing="OnClosing">
+ <DockPanel>
+  <Menu DockPanel.Dock="Top"><MenuItem Header="Codex Ayarları" Click="SettingsClick"/></Menu>
+  <ScrollViewer><StackPanel Margin="24">
+   <ToggleButton x:Name="Route" Content="Sanal ses yönlendirmesi" Click="RouteClick" Padding="10"/>
+   <GroupBox x:Name="Settings" Header="Ses" Visibility="Collapsed" Margin="0,16"><StackPanel Margin="8">
+    <Label Target="{Binding ElementName=Voice}" Content="Yapay zekâ sesi"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged"/>
+    <Button Content="Türkçe örnek dinle" Click="PreviewClick" Margin="0,8"/>
+   </StackPanel></GroupBox>
+   <Label Target="{Binding ElementName=Prompt}" Content="Codex’e sor"/><TextBox x:Name="Prompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"/>
+   <Button x:Name="Ask" Content="Sor ve yanıtı seslendir" Click="AskClick" Margin="0,8"/>
+   <TextBox x:Name="Answer" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0"/>
+   <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,12"/>
+  </StackPanel></ScrollViewer>
+ </DockPanel>
 </Window>
