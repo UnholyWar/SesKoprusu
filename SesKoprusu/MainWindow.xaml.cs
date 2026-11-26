@@ -60,7 +60,7 @@ public partial class MainWindow : Window
                 {
                     var voices = await CodexVoice.Choices(timeout.Token);
                     LoadVoices(voices);
-                    SpeechState.Text = "Codex voice list loaded. Use Play sample to test audio.";
+                    SpeechState.Text = "Voices from your Codex session.";
                     catalogLoaded = true;
                 }
                 catch (Exception) { SpeechState.Text = "Voice list unavailable. Preview to check Codex realtime access."; }
