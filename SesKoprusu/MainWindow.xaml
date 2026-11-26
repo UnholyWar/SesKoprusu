@@ -17,9 +17,15 @@
     <DockPanel Margin="0,2"><ComboBox DockPanel.Dock="Right" x:Name="Outgoing" SelectionChanged="LanguageChanged" AutomationProperties.Name="Giden sesin hedef dili"/><TextBlock Text="Giden sesin hedef dili" VerticalAlignment="Center"/></DockPanel>
    </StackPanel>
    <StackPanel x:Name="Settings" Visibility="Collapsed">
-    <TextBlock Text="Codex oturumu" FontWeight="SemiBold"/>
-    <WrapPanel><Button x:Name="Login" Content="Cihaz koduyla giriş" Click="LoginClick"/><Button x:Name="Test" Content="Bağlantıyı test et" Click="TestClick"/></WrapPanel>
-    <WrapPanel><Button Content="Hesap güvenliği ↗" Click="SecurityClick"/><Button Content="CLI seç…" Click="ChooseCli"/><Button Content="CLI indir ↗" Click="DownloadCli"/></WrapPanel>
+    <TextBlock Text="ChatGPT hesabı" FontWeight="SemiBold"/>
+    <WrapPanel><Button x:Name="Login" Content="Cihaz koduyla giriş" Click="LoginClick"/><Button x:Name="Test" Content="Durumu yenile" Click="TestClick"/></WrapPanel>
+    <WrapPanel><Button x:Name="Reconnect" Content="App Server’a yeniden bağlan" Click="ReconnectClick"/><Button Content="Hesap güvenliği ↗" Click="SecurityClick"/></WrapPanel>
+    <StackPanel x:Name="Challenge" Visibility="Collapsed" Margin="0,6">
+     <TextBlock Text="ChatGPT doğrulama sayfasında bu kodu girin."/>
+     <TextBox x:Name="UserCode" IsReadOnly="True" FontSize="22" Padding="6" FontFamily="Consolas" AutomationProperties.Name="Tek kullanımlık cihaz kodu"/>
+     <Button Content="ChatGPT doğrulama sayfasını aç ↗" Click="VerificationClick"/>
+    </StackPanel>
+    <Button x:Name="CancelLogin" Content="İptal" HorizontalAlignment="Left" Visibility="Collapsed" Click="CancelClick"/>
     <TextBlock Text="Kodu yalnızca kendi başlattığınız girişte kullanın. Kimseyle paylaşmayın." TextWrapping="Wrap" Margin="0,4,0,10"/>
     <TextBlock Text="OpenAI ses API anahtarı"/><PasswordBox x:Name="Key" PasswordChanged="KeyChanged" Padding="6" ToolTip="Yalnızca bu oturumda kullanılır"/>
     <TextBlock x:Name="SpeechState" Foreground="#D2B4EF" TextWrapping="Wrap" Margin="0,3,0,8"/>

@@ -8,6 +8,7 @@ internal static class CodexSession
 {
     public static string? FindCli()
     {
+        if (File.Exists(CliInstaller.Executable)) return CliInstaller.Executable;
         var folders = new List<string> { AppContext.BaseDirectory };
         if (Local.Has("cli") && Local.Read<string>("cli") is string chosen && Path.IsPathFullyQualified(chosen) && File.Exists(chosen)) return chosen;
         folders.AddRange((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator));
@@ -29,27 +30,33 @@ internal static class CodexSession
         return null;
     }
 
-    static async Task<(int Code, string Output, string Error)> Run(string[] args, CancellationToken token, string? prompt = null, bool interactive = false)
+    internal static ProcessStartInfo StartInfo()
     {
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SesKoprusu");
         var work = Directory.CreateDirectory(Path.Combine(root, "session")).FullName;
         var exe = FindCli() ?? throw new InvalidOperationException("Codex Ayarları üzerinden CLI bileşenini seçin.");
         var info = new ProcessStartInfo(exe)
         {
-            UseShellExecute = false, WorkingDirectory = work, CreateNoWindow = !interactive,
-            RedirectStandardOutput = !interactive, RedirectStandardError = !interactive, RedirectStandardInput = prompt != null
+            UseShellExecute = false, WorkingDirectory = work, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8
         };
         info.Environment["CODEX_HOME"] = Directory.CreateDirectory(Path.Combine(root, "codex")).FullName;
         foreach (var name in new[] { "OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN" }) info.Environment.Remove(name);
         info.ArgumentList.Add("-c");
         info.ArgumentList.Add("forced_login_method=\"chatgpt\"");
+        return info;
+    }
+
+    static async Task<(int Code, string Output, string Error)> Run(string[] args, CancellationToken token, string? prompt = null)
+    {
+        var info = StartInfo();
+        info.RedirectStandardInput = prompt != null;
         foreach (var arg in args) info.ArgumentList.Add(arg);
         if (prompt != null) info.StandardInputEncoding = new UTF8Encoding(false);
-        if (!interactive) info.StandardOutputEncoding = Encoding.UTF8;
         using var process = Process.Start(info) ?? throw new IOException("Codex başlatılamadı.");
         using var cancel = token.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
-        var output = interactive ? Task.FromResult("") : process.StandardOutput.ReadToEndAsync();
-        var error = interactive ? Task.FromResult("") : process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
         if (prompt != null) { await process.StandardInput.WriteAsync(prompt); process.StandardInput.Close(); }
         await process.WaitForExitAsync(token);
         return (process.ExitCode, await output, await error);
@@ -57,14 +64,10 @@ internal static class CodexSession
 
     public static async Task<bool> SignedIn(CancellationToken token)
     {
-        var status = await Run(["login", "status"], token);
-        return status.Code == 0 && (status.Output + status.Error).Contains("Logged in using ChatGPT", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static async Task Login(CancellationToken token)
-    {
-        var result = await Run(["login", "--device-auth"], token, interactive: true);
-        if (result.Code != 0) throw new InvalidOperationException("Giriş tamamlanmadı. Hesap izinlerini kontrol edip tekrar deneyin.");
+        using var server = await AccountServer.Connect(token);
+        var result = await server.Call("account/read", new { refreshToken = false }, token);
+        return result.GetProperty("account") is { ValueKind: System.Text.Json.JsonValueKind.Object } account &&
+               account.GetProperty("type").GetString() == "chatgpt";
     }
 
     public static async Task<string> Ask(string prompt, CancellationToken token)

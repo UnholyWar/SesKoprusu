@@ -26,11 +26,14 @@ public partial class MainWindow : Window
     bool HasSpeechKey => !string.IsNullOrWhiteSpace(SpeechKey);
     bool connected;
     bool cliFound;
+    CancellationTokenSource? loginAttempt;
+    Uri? verificationUrl;
 
     void UpdateControls()
     {
-        Login.IsEnabled = ready && !busy && cliFound;
-        Test.IsEnabled = ready && !busy && cliFound;
+        Login.IsEnabled = ready && !busy;
+        Reconnect.IsEnabled = ready && !busy;
+        Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
         Preview.IsEnabled = ready && !busy && connected && HasSpeechKey;
         Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         Route.IsEnabled = ready && !busy && (routing.Pending || connected);
@@ -44,8 +47,10 @@ public partial class MainWindow : Window
         try
         {
             cliFound = CodexSession.FindCli() != null;
-            if (!cliFound) { SessionState.Text = "CLI bulunamadı · Codex Ayarları’ndan seçin"; return false; }
-            signedIn = await CodexSession.SignedIn(lifetime.Token);
+            if (!cliFound) { SessionState.Text = "Oturum kapalı · İlk girişte Codex otomatik indirilir"; return false; }
+            using var accountTimeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            accountTimeout.CancelAfter(TimeSpan.FromSeconds(15));
+            signedIn = await CodexSession.SignedIn(accountTimeout.Token);
             if (!signedIn) { SessionState.Text = "Oturum kapalı · Codex Ayarları’ndan giriş yapın"; return false; }
             SessionState.Text = "Codex bağlantısı test ediliyor…";
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
@@ -61,6 +66,18 @@ public partial class MainWindow : Window
 
     async void TestClick(object sender, RoutedEventArgs e)
     {
+        if (loginAttempt != null)
+        {
+            Status.Text = "Tarayıcıda cihaz kodu onayı bekleniyor.";
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(loginAttempt.Token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                if (await CodexSession.SignedIn(timeout.Token)) Status.Text = "Hesap oturumu açık.";
+            }
+            catch (Exception) { if (loginAttempt != null) Status.Text = "Hesap durumu alınamadı."; }
+            return;
+        }
         busy = true;
         UpdateControls();
         try { await CheckSession(); }
@@ -69,24 +86,56 @@ public partial class MainWindow : Window
 
     void KeyChanged(object sender, RoutedEventArgs e) { if (ready) UpdateControls(); }
 
-    void ChooseCli(object sender, RoutedEventArgs e)
+    void VerificationClick(object sender, RoutedEventArgs e)
     {
-        var picker = new Microsoft.Win32.OpenFileDialog { Filter = "Codex CLI|codex*.exe", Title = "Resmî Codex CLI çalıştırılabilir dosyasını seçin" };
-        if (picker.ShowDialog(this) != true) return;
-        try { Local.Save("cli", picker.FileName); TestClick(sender, e); }
-        catch (Exception ex) { Status.Text = ex.Message; }
+        if (verificationUrl != null) OpenPage(verificationUrl.AbsoluteUri);
     }
 
-    void DownloadCli(object sender, RoutedEventArgs e) => OpenPage("https://github.com/openai/codex/releases/latest");
+    void CancelClick(object sender, RoutedEventArgs e) => loginAttempt?.Cancel();
 
-    async void LoginClick(object sender, RoutedEventArgs e)
+    async void ReconnectClick(object sender, RoutedEventArgs e) => await StartAccountFlow(false);
+    async void LoginClick(object sender, RoutedEventArgs e) => await StartAccountFlow(true);
+
+    async Task StartAccountFlow(bool login)
     {
+        if (busy) return;
         busy = true;
+        Status.Text = "";
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        attempt.CancelAfter(TimeSpan.FromMinutes(20));
+        loginAttempt = attempt;
+        CancelLogin.Visibility = Visibility.Visible;
         UpdateControls();
-        SessionState.Text = "Codex penceresindeki giriş adımlarını tamamlayın…";
-        try { await CodexSession.Login(lifetime.Token); }
+        try
+        {
+            if (CodexSession.FindCli() == null) SessionState.Text = "Codex indiriliyor…";
+            await CliInstaller.Ensure(http, attempt.Token);
+            cliFound = true;
+            SessionState.Text = "App Server’a bağlanılıyor…";
+            using var server = await AccountServer.Connect(attempt.Token);
+            if (login)
+                await server.Login((code, url) =>
+                {
+                    UserCode.Text = code;
+                    verificationUrl = url;
+                    Challenge.Visibility = Visibility.Visible;
+                    SessionState.Text = "Tarayıcıda giriş onayı bekleniyor…";
+                    UpdateControls();
+                    OpenPage(url.AbsoluteUri);
+                }, attempt.Token);
+        }
+        catch (OperationCanceledException) { Status.Text = "İşlem iptal edildi veya süresi doldu."; }
         catch (Exception ex) { Status.Text = ex.Message; }
-        finally { await CheckSession(); busy = false; UpdateControls(); }
+        finally
+        {
+            verificationUrl = null;
+            UserCode.Clear();
+            Challenge.Visibility = CancelLogin.Visibility = Visibility.Collapsed;
+            loginAttempt = null;
+            if (!lifetime.IsCancellationRequested) await CheckSession();
+            busy = false;
+            UpdateControls();
+        }
     }
 
     void SecurityClick(object sender, RoutedEventArgs e) => OpenPage("https://chatgpt.com/#settings/Security");
