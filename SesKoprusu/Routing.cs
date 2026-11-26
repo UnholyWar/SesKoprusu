@@ -35,29 +35,45 @@ internal sealed class Routing
     public const string Monitor = "Pass through";
     public static bool Translates(string direction) => direction != Original && direction != Monitor;
 
-    public string? Missing(string incoming, string outgoing, bool activate = false)
+    internal record CableStatus(string Name, bool Required, bool Installed, DeviceState? Playback, DeviceState? Recording)
     {
-        var required = new List<string>();
-        if (incoming != Original) required.Add("CABLE");
-        if (Translates(outgoing)) required.Add("CABLE-A");
-        foreach (var prefix in required)
+        public bool Ready => Playback == DeviceState.Active && Recording == DeviceState.Active;
+        public bool CanEnable => Playback == DeviceState.Disabled || Recording == DeviceState.Disabled;
+        public bool NeedsInstall => !Installed && !Ready;
+        public string Description => $"{Name} · {(Required ? "Required" : "Optional")}\nDriver: {(Installed ? "Installed" : "Not detected")}   ·   Package: {(DriverSetup.HasPackage(Name) ? "Available locally" : "Not cached")}\nPlayback: {Describe(Playback)}   ·   Recording: {Describe(Recording)}";
+
+        static string Describe(DeviceState? state) => state switch
+        {
+            DeviceState.Active => "Ready", DeviceState.Disabled => "Disabled",
+            DeviceState.Unplugged => "Disconnected", _ => "Not visible"
+        };
+    }
+
+    public List<CableStatus> Inspect(string incoming, string outgoing)
+    {
+        var controllers = AudioControllers.Present();
+        var result = new List<CableStatus>();
+        foreach (var prefix in new[] { "CABLE", "CABLE-A" })
+        {
+            using var playback = FindCable(DataFlow.Render, prefix + " Input", DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
+            using var recording = FindCable(DataFlow.Capture, prefix + " Output", DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
+            var description = prefix == "CABLE" ? "VB-Audio Virtual Cable" : "VB-Audio Cable A";
+            bool present = controllers.Any(n => string.Equals(n, description, StringComparison.OrdinalIgnoreCase)) || playback != null || recording != null;
+            result.Add(new(prefix, prefix == "CABLE" ? incoming != Original : Translates(outgoing), present, playback?.State, recording?.State));
+        }
+        return result;
+    }
+
+    public void EnableDisabled(string prefix)
+    {
         foreach (var flow in new[] { DataFlow.Render, DataFlow.Capture })
         {
-            var name = prefix + (flow == DataFlow.Render ? " Input" : " Output");
-            using var active = FindCable(flow, name, DeviceState.Active);
-            if (active != null) continue;
-            using var disabled = FindCable(flow, name, DeviceState.Disabled);
-            if (activate && disabled != null)
-            {
-                var policy = CreatePolicy();
-                try { policy.SetEndpointVisibility(disabled.ID, 1); }
-                finally { Marshal.ReleaseComObject(policy); }
-                using var restored = FindCable(flow, name, DeviceState.Active);
-                if (restored != null) continue;
-            }
-            return prefix;
+            using var disabled = FindCable(flow, prefix + (flow == DataFlow.Render ? " Input" : " Output"), DeviceState.Disabled);
+            if (disabled == null) continue;
+            var policy = CreatePolicy();
+            try { policy.SetEndpointVisibility(disabled.ID, 1); }
+            finally { Marshal.ReleaseComObject(policy); }
         }
-        return null;
     }
 
     readonly List<AudioTranslation> translations = new();

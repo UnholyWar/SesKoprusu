@@ -26,7 +26,7 @@ public partial class MainWindow : Window
 
     void UpdateControls()
     {
-        Repair.IsEnabled = ready && !busy && !routing.Pending;
+        ImportPackage.IsEnabled = Repair.IsEnabled = DeviceRefresh.IsEnabled = ready && !busy && !routing.Pending;
         Login.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
         Login.IsEnabled = ready && !busy && !signedIn;
         Reconnect.IsEnabled = ready && !busy;
@@ -206,10 +206,23 @@ public partial class MainWindow : Window
 
     void RefreshDrivers()
     {
-        var missing = routing.Missing(IncomingMode, OutgoingMode);
-        DriverState.Text = missing == null ? "Required audio devices are ready." :
-            $"{missing} is missing or disabled. Select Install or enable devices.";
+        var inventory = routing.Inspect(IncomingMode, OutgoingMode);
+        DriverState.Text = string.Join("\n\n", inventory.Select(d => d.Description));
+        var unavailable = inventory.FirstOrDefault(d => d.Required && !d.Ready);
+        Repair.Visibility = unavailable is { CanEnable: true } or { NeedsInstall: true } ? Visibility.Visible : Visibility.Collapsed;
+        ImportPackage.Visibility = unavailable is { Name: "CABLE", NeedsInstall: true } && !DriverSetup.HasPackage("CABLE") ? Visibility.Visible : Visibility.Collapsed;
+        License.Visibility = unavailable is { Name: "CABLE-A", NeedsInstall: true } && !DriverSetup.HasPackage("CABLE-A") ? Visibility.Visible : Visibility.Collapsed;
+        Repair.Content = unavailable?.CanEnable == true ? "Enable devices" :
+            unavailable != null && DriverSetup.HasPackage(unavailable.Name) ? "Install local package" : "Set up driver";
+        DeviceHint.Text = unavailable == null ? "No installation needed for the selected directions." :
+            unavailable.CanEnable ? "Enable the disabled endpoints, then refresh." :
+            unavailable.Installed ? (System.Windows.SystemParameters.IsRemoteSession
+                ? "Remote Desktop session: connect at the host PC or choose Play on remote computer in Remote Audio settings, reconnect and refresh."
+                : "The driver is installed. Check playback and recording devices in Windows Sound, then refresh. A recent driver installation may require a restart.") :
+            "Driver registration requires Windows administrator approval.";
     }
+
+    void RefreshDevicesClick(object sender, RoutedEventArgs e) => TryRefreshDrivers();
 
     void LicenseClick(object sender, RoutedEventArgs e) => OpenPage("https://vb-audio.com/Cable/");
 
@@ -219,24 +232,21 @@ public partial class MainWindow : Window
         UpdateControls();
         try
         {
-            var missing = routing.Missing(IncomingMode, OutgoingMode, activate: true);
-            if (missing == null) { Status.Text = "Audio devices are ready."; return; }
-            while (missing != null)
+            var device = routing.Inspect(IncomingMode, OutgoingMode).FirstOrDefault(d => d.Required && !d.Ready);
+            if (device == null) { Status.Text = "Audio devices are ready."; return; }
+            if (device.CanEnable) routing.EnableDisabled(device.Name);
+            else if (device.NeedsInstall)
             {
                 string? zip = null;
-                if (missing == "CABLE-A")
+                if (sender == ImportPackage || (device.Name == "CABLE-A" && !DriverSetup.HasPackage(device.Name)))
                 {
-                    var picker = new Microsoft.Win32.OpenFileDialog { Filter = "VB-Audio A+B package|*.zip", Title = "Select your licensed VB-CABLE A+B package" };
-                    if (picker.ShowDialog(this) != true) { Status.Text = "Use Get Cable A+B to obtain the vendor package."; return; }
+                    var picker = new Microsoft.Win32.OpenFileDialog { Filter = "VB-Audio driver package|*.zip", Title = $"Select the official {device.Name} driver ZIP" };
+                    if (picker.ShowDialog(this) != true) return;
                     zip = picker.FileName;
                 }
-                await DriverSetup.Install(http, zip, Progress, lifetime.Token);
-                var remaining = routing.Missing(IncomingMode, OutgoingMode, activate: true);
-                if (remaining == missing) break; // The installer may require a reboot.
-                missing = remaining;
+                await DriverSetup.Install(http, device.Name, zip, Progress, lifetime.Token);
             }
-            Status.Text = routing.Missing(IncomingMode, OutgoingMode, true) == null ? "Devices ready. Return to the bridge and switch it on." :
-                "Finish the driver installation and restart Windows if requested. Then check the devices again.";
+            Status.Text = "Device status refreshed.";
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { Transfer.Visibility = Visibility.Collapsed; busy = false; UpdateControls(); TryRefreshDrivers(); }
@@ -244,7 +254,7 @@ public partial class MainWindow : Window
 
     void TryRefreshDrivers()
     {
-        try { RefreshDrivers(); } catch (Exception ex) { DriverState.Text = ex.Message; }
+        try { RefreshDrivers(); } catch (Exception ex) { DriverState.Text = "Device inventory unavailable."; DeviceHint.Text = ex.Message; ImportPackage.Visibility = Repair.Visibility = License.Visibility = Visibility.Collapsed; }
     }
 
     void LanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -290,11 +300,11 @@ public partial class MainWindow : Window
                     Status.Text = "Original audio is already active in both directions.";
                     return;
                 }
-                if (routing.Missing(IncomingMode, OutgoingMode) is string missing)
+                if (routing.Inspect(IncomingMode, OutgoingMode).FirstOrDefault(d => d.Required && !d.Ready) is { } unavailable)
                 {
                     if (!Settings.IsVisible) SettingsClick(this, e);
                     DeviceTab.IsSelected = true;
-                    Status.Text = $"{missing} needs setup. Select Install or enable devices to continue.";
+                    Status.Text = $"{unavailable.Name} is unavailable for routing in this session. See Devices for details.";
                     return;
                 }
                 if (!await CheckSession()) return;

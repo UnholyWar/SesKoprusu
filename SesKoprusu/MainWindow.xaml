@@ -48,8 +48,8 @@
      <TabItem x:Name="DeviceTab" Header="Devices"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
     <TextBlock Text="Audio devices" Style="{StaticResource SectionTitle}"/>
     <TextBlock x:Name="DriverState" TextWrapping="Wrap" Margin="0,3"/>
-    <WrapPanel><Button x:Name="Repair" Content="Install or enable devices" Click="RepairClick"/><Button Content="Get Cable A+B ↗" Click="LicenseClick"/></WrapPanel>
-    <TextBlock Text="Windows requires administrator approval to register the audio driver." TextWrapping="Wrap" Margin="0,3,0,10"/>
+    <WrapPanel><Button x:Name="Repair" Visibility="Collapsed" Content="Set up driver" Click="RepairClick"/><Button x:Name="ImportPackage" Visibility="Collapsed" Content="Use downloaded ZIP…" Click="RepairClick"/><Button x:Name="DeviceRefresh" Content="Refresh devices" Click="RefreshDevicesClick"/><Button x:Name="License" Visibility="Collapsed" Content="Get Cable A+B ↗" Click="LicenseClick"/></WrapPanel>
+    <TextBlock x:Name="DeviceHint" TextWrapping="Wrap" Margin="0,3,0,10"/>
      </StackPanel></TabItem>
      <TabItem Header="Voice"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
     <TextBlock Text="Speech and translation" Style="{StaticResource SectionTitle}"/>
