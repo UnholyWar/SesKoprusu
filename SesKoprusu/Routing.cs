@@ -13,19 +13,41 @@ internal sealed class Routing
     WasapiOut? monitor;
     public bool Pending => Local.Has("routing");
 
-    MMDevice? FindCable(DataFlow flow, string name, DeviceState state)
+    public const string HiFi = "Hi-Fi Cable";
+    static string ControllerName(string cable) => cable == HiFi ? "VB-Audio Hi-Fi Cable" : "VB-Audio Virtual Cable";
+
+    static bool MatchesCable(MMDevice device, string cable, DataFlow flow)
     {
+        var label = device.FriendlyName;
+        var name = cable + (flow == DataFlow.Render ? " Input" : " Output");
+        return !label.Contains("16ch", StringComparison.OrdinalIgnoreCase) &&
+            (label.Equals(name, StringComparison.OrdinalIgnoreCase) ||
+             label.StartsWith(name + " (", StringComparison.OrdinalIgnoreCase) ||
+             device.DeviceFriendlyName.Equals(ControllerName(cable), StringComparison.OrdinalIgnoreCase));
+    }
+
+    MMDevice? FindCable(DataFlow flow, string cable, DeviceState state)
+    {
+        MMDevice? candidate = null;
         foreach (var device in devices.EnumerateAudioEndPoints(flow, state))
         {
-            var label = device.FriendlyName;
-            if (label.Equals(name, StringComparison.OrdinalIgnoreCase) ||
-                label.StartsWith(name + " (", StringComparison.OrdinalIgnoreCase) ||
-                (device.DeviceFriendlyName.Equals(name.StartsWith("CABLE-A") ? "VB-Audio Cable A" : "VB-Audio Virtual Cable", StringComparison.OrdinalIgnoreCase)
-                 && !label.Contains("16ch", StringComparison.OrdinalIgnoreCase)))
-                return device;
+            if (MatchesCable(device, cable, flow))
+            {
+                if (device.State == DeviceState.Active)
+                {
+                    candidate?.Dispose();
+                    return device;
+                }
+                if (candidate == null || (device.State == DeviceState.Disabled && candidate.State != DeviceState.Disabled))
+                {
+                    candidate?.Dispose();
+                    candidate = device;
+                    continue;
+                }
+            }
             device.Dispose();
         }
-        return null;
+        return candidate;
     }
 
     MMDevice Cable(DataFlow flow, string name) => FindCable(flow, name, DeviceState.Active)
@@ -35,9 +57,9 @@ internal sealed class Routing
     public const string Monitor = "Pass through";
     public static bool Translates(string direction) => direction != Original && direction != Monitor;
 
-    internal record CableStatus(string Name, bool Required, bool Installed, DeviceState? Playback, DeviceState? Recording)
+    internal record CableStatus(string Name, bool Required, bool Installed, DeviceState? Playback, DeviceState? Recording, string? FormatIssue)
     {
-        public bool Ready => Playback == DeviceState.Active && Recording == DeviceState.Active;
+        public bool Ready => Playback == DeviceState.Active && Recording == DeviceState.Active && FormatIssue == null;
         public bool CanEnable => Playback == DeviceState.Disabled || Recording == DeviceState.Disabled;
         public bool NeedsInstall => !Installed && !Ready;
         public string Description => $"{Name} · {(Required ? "Required" : "Optional")}\nDriver: {(Installed ? "Installed" : "Not detected")}   ·   Package: {(DriverSetup.HasPackage(Name) ? "Available locally" : "Not cached")}\nPlayback: {Describe(Playback)}   ·   Recording: {Describe(Recording)}";
@@ -49,7 +71,7 @@ internal sealed class Routing
         };
     }
 
-    public static string MicrophoneCable(string incoming) => Translates(incoming) ? "CABLE-A" : "CABLE";
+    public static string MicrophoneCable(string incoming) => Translates(incoming) ? HiFi : "CABLE";
 
     static bool RoutePlayback(string incoming, string outgoing) =>
         Translates(incoming) || (incoming == Monitor && !Translates(outgoing));
@@ -70,22 +92,41 @@ internal sealed class Routing
     {
         var controllers = AudioControllers.Present();
         var result = new List<CableStatus>();
-        foreach (var prefix in new[] { "CABLE", "CABLE-A" })
+        foreach (var prefix in new[] { "CABLE", HiFi })
         {
-            using var playback = FindCable(DataFlow.Render, prefix + " Input", DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
-            using var recording = FindCable(DataFlow.Capture, prefix + " Output", DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
-            var description = prefix == "CABLE" ? "VB-Audio Virtual Cable" : "VB-Audio Cable A";
+            using var playback = FindCable(DataFlow.Render, prefix, DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
+            using var recording = FindCable(DataFlow.Capture, prefix, DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
+            var description = ControllerName(prefix);
             bool present = controllers.Any(n => string.Equals(n, description, StringComparison.OrdinalIgnoreCase)) || playback != null || recording != null;
-            result.Add(new(prefix, (prefix == "CABLE" && RoutePlayback(incoming, outgoing)) || (Translates(outgoing) && prefix == MicrophoneCable(incoming)), present, playback?.State, recording?.State));
+            result.Add(new(prefix, (prefix == "CABLE" && RoutePlayback(incoming, outgoing)) || (Translates(outgoing) && prefix == MicrophoneCable(incoming)), present, playback?.State, recording?.State,
+                prefix == HiFi && playback?.State == DeviceState.Active && recording?.State == DeviceState.Active
+                    ? CheckHiFiFormat(playback, recording) : null));
         }
         return result;
+    }
+
+    static string? CheckHiFiFormat(MMDevice input, MMDevice output)
+    {
+        try
+        {
+            using var playback = input.AudioClient;
+            using var recording = output.AudioClient;
+            var inputRate = playback.MixFormat.SampleRate;
+            var outputRate = recording.MixFormat.SampleRate;
+            return inputRate == outputRate ? null :
+                $"Hi-Fi Cable Input is {inputRate} Hz and Output is {outputRate} Hz. In Windows Sound, set both default formats to the same rate, then refresh.";
+        }
+        catch (COMException)
+        {
+            return "Windows could not read the Hi-Fi Cable formats. Close apps using the cable and refresh devices.";
+        }
     }
 
     public void EnableDisabled(string prefix)
     {
         foreach (var flow in new[] { DataFlow.Render, DataFlow.Capture })
         {
-            using var disabled = FindCable(flow, prefix + (flow == DataFlow.Render ? " Input" : " Output"), DeviceState.Disabled);
+            using var disabled = FindCable(flow, prefix, DeviceState.Disabled);
             if (disabled == null) continue;
             var policy = CreatePolicy();
             try { policy.SetEndpointVisibility(disabled.ID, 1); }
@@ -127,13 +168,15 @@ internal sealed class Routing
             if (Translates(outgoing))
             {
                 var prefix = MicrophoneCable(incoming);
-                var send = Hold(Cable(DataFlow.Render, prefix + " Input"));
-                var virtualMic = Hold(Cable(DataFlow.Capture, prefix + " Output"));
+                var send = Hold(Cable(DataFlow.Render, prefix));
+                var virtualMic = Hold(Cable(DataFlow.Capture, prefix));
                 var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Multimedia).Id));
-                if (mic.ID == virtualMic.ID || mic.FriendlyName.StartsWith("CABLE Output", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Select your physical microphone first.");
+                if (MatchesCable(mic, "CABLE", DataFlow.Capture) || MatchesCable(mic, HiFi, DataFlow.Capture)) throw new InvalidOperationException("Select your physical microphone first.");
                 using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-                if (physicalOutput.ID == send.ID)
+                if (MatchesCable(physicalOutput, "CABLE", DataFlow.Render) || MatchesCable(physicalOutput, HiFi, DataFlow.Render))
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
+                if (prefix == HiFi && CheckHiFiFormat(send, virtualMic) is { } issue)
+                    throw new InvalidOperationException(issue);
                 outgoingStream = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error), physicalMicrophone: true);
                 translations.Add(outgoingStream);
                 recorder = virtualMic;
@@ -141,11 +184,11 @@ internal sealed class Routing
             }
             if (RoutePlayback(incoming, outgoing))
             {
-                using var output = Cable(DataFlow.Render, "CABLE Input");
+                using var output = Cable(DataFlow.Render, "CABLE");
                 renderId = output.ID;
-                var input = Hold(Cable(DataFlow.Capture, "CABLE Output"));
+                var input = Hold(Cable(DataFlow.Capture, "CABLE"));
                 var speakers = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Render && e.Role == Role.Multimedia).Id));
-                if (speakers.ID == renderId) throw new InvalidOperationException("Select your physical speakers as the default output first.");
+                if (MatchesCable(speakers, "CABLE", DataFlow.Render) || MatchesCable(speakers, HiFi, DataFlow.Render)) throw new InvalidOperationException("Select your physical speakers as the default output first.");
                 if (Translates(incoming))
                     translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, error => failed("Incoming audio: " + error)));
                 else
