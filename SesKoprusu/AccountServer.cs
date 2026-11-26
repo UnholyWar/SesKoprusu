@@ -48,8 +48,6 @@ internal sealed class AccountServer : IDisposable
         return json.RootElement.Clone();
     }
 
-    internal Task AppendAudio(string threadId, byte[] pcm) => Send(new { id = ++sequence, method = "thread/realtime/appendAudio", @params = new { threadId, audio = new { data = Convert.ToBase64String(pcm), sampleRate = 24000, numChannels = 1 } } });
-
     public async Task<JsonElement> Call(string method, object parameters, CancellationToken token)
     {
         if (method == "thread/realtime/start") streaming = true;

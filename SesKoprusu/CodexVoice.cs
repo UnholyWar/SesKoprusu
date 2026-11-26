@@ -1,6 +1,9 @@
 using System.IO;
+using NAudio.Codecs;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using SIPSorcery.Net;
+using SIPSorceryMedia.Abstractions;
 
 namespace SesKoprusu;
 
@@ -12,76 +15,128 @@ internal static class CodexVoice
     {
         using var server = await AccountServer.Connect(token, true);
         var catalog = await server.Call("thread/realtime/listVoices", new { }, token);
-        return [Default, .. catalog.GetProperty("voices").GetProperty("v2").EnumerateArray().Select(x => x.GetString()!)];
+        return [Default, .. catalog.GetProperty("voices").GetProperty("v3").EnumerateArray().Select(x => x.GetString()!)];
     }
 
-    public static async Task<string> Start(AccountServer server, string voice, string instructions, CancellationToken token)
+    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token)
     {
-        var thread = await server.Call("thread/start", new { ephemeral = true, sandbox = "read-only", approvalPolicy = "never" }, token);
-        var threadId = thread.GetProperty("thread").GetProperty("id").GetString()!;
-        await server.Call("thread/realtime/start", new { threadId, version = "v2", outputModality = "audio",
-            voice = voice == Default ? null : voice, prompt = instructions, transport = new { type = "websocket" } }, token);
-        while (true)
+        using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
+        startup.CancelAfter(TimeSpan.FromSeconds(45));
+        using var server = await AccountServer.Connect(startup.Token, true);
+        using var peer = new RTCPeerConnection(null);
+        peer.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.onconnectionstatechange += state =>
         {
-            var message = await server.NextEvent(token);
-            if (!message.TryGetProperty("method", out var method) || !message.TryGetProperty("params", out var payload) ||
-                !payload.TryGetProperty("threadId", out var id) || id.GetString() != threadId) continue;
-            if (method.GetString() == "thread/realtime/started") return threadId;
-            CheckVoiceFailure(method.GetString(), payload);
-        }
-    }
-
-    static void CheckVoiceFailure(string? method, System.Text.Json.JsonElement payload)
-    {
-        if (method == "thread/realtime/error")
-            throw new IOException("Codex voice error: " + AccountServer.Detail(payload, "message"));
-        if (method == "thread/realtime/closed")
-            throw new IOException("Codex voice connection closed: " + AccountServer.Detail(payload, "reason"));
-    }
-
-    public static async Task Play(AccountServer server, string threadId, MMDevice destination, bool preview, CancellationToken token)
-    {
-        using var player = new WasapiOut(destination, AudioClientShareMode.Shared, false, 80);
-        BufferedWaveProvider? buffer = null;
-        while (true)
-        {
-            using var wait = CancellationTokenSource.CreateLinkedTokenSource(token);
-            if (preview) wait.CancelAfter(buffer == null ? TimeSpan.FromSeconds(35) : TimeSpan.FromSeconds(3));
-            System.Text.Json.JsonElement message;
-            try { message = await server.NextEvent(wait.Token); }
-            catch (OperationCanceledException) when (preview && buffer != null && !token.IsCancellationRequested) { break; }
-            if (message.TryGetProperty("error", out var error)) throw new IOException("Codex rejected the audio request: " + AccountServer.Detail(error, "message"));
-            if (!message.TryGetProperty("method", out var method) || !message.TryGetProperty("params", out var p) ||
-                !p.TryGetProperty("threadId", out var id) || id.GetString() != threadId) continue;
-            if (preview && buffer != null && method.GetString() == "thread/realtime/closed"
-                && (!p.TryGetProperty("reason", out var reason) || reason.GetString() is null or "completed" or "normal"))
-                break;
-            CheckVoiceFailure(method.GetString(), p);
-            if (method.GetString() != "thread/realtime/outputAudio/delta") continue;
-            var audio = p.GetProperty("audio");
-            var bytes = Convert.FromBase64String(audio.GetProperty("data").GetString()!);
-            if (buffer == null)
+            if (state == RTCPeerConnectionState.connected) connected.TrySetResult();
+            if (state == RTCPeerConnectionState.failed || state == RTCPeerConnectionState.closed)
             {
-                buffer = new BufferedWaveProvider(new WaveFormat(audio.GetProperty("sampleRate").GetInt32(), 16, audio.GetProperty("numChannels").GetInt32()))
-                    { BufferDuration = TimeSpan.FromSeconds(45) };
-                player.Init(buffer);
-                player.Play();
+                var error = new IOException("Codex WebRTC audio disconnected.");
+                connected.TrySetException(error);
+                ended.TrySetException(error);
             }
-            buffer.AddSamples(bytes, 0, bytes.Length);
+        };
+        var format = new WaveFormat(8000, 16, 1);
+        var buffer = new BufferedWaveProvider(format) { DiscardOnBufferOverflow = true };
+        using var player = new WasapiOut(speakers, AudioClientShareMode.Shared, false, 80);
+        player.Init(buffer);
+        long lastSpeech = 0;
+        peer.OnRtpPacketReceived += (_, media, packet) =>
+        {
+            if (media != SDPMediaTypesEnum.audio || packet.Header.PayloadType != 0) return;
+            var pcm = new byte[packet.Payload.Length * 2];
+            bool audible = false;
+            for (int i = 0; i < packet.Payload.Length; i++)
+            {
+                var sample = MuLawDecoder.MuLawToLinearSample(packet.Payload[i]);
+                pcm[i * 2] = (byte)sample;
+                pcm[i * 2 + 1] = (byte)(sample >> 8);
+                audible |= Math.Abs((int)sample) > 128;
+            }
+            buffer.AddSamples(pcm, 0, pcm.Length);
+            if (audible) Interlocked.Exchange(ref lastSpeech, Environment.TickCount64);
+        };
+        await peer.createDataChannel("oai-events").WaitAsync(startup.Token);
+        var offer = peer.createOffer(null);
+        await peer.setLocalDescription(offer);
+        var thread = await server.Call("thread/start", new { ephemeral = true, sandbox = "read-only", approvalPolicy = "never" }, startup.Token);
+        var threadId = thread.GetProperty("thread").GetProperty("id").GetString()!;
+        await server.Call("thread/realtime/start", new { threadId, version = "v3", outputModality = "audio",
+            voice = voice == Default ? null : voice, prompt = instructions, transport = new { type = "webrtc", sdp = offer.sdp } }, startup.Token);
+
+        using var eventsLifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var negotiated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var events = ReadEvents();
+        try
+        {
+            await await Task.WhenAny(events, connected.Task.WaitAsync(startup.Token));
+            player.Play();
+            if (microphone == null)
+            {
+                // Only one reader may consume App Server notifications. Pause the event pump
+                // after negotiation while issuing the preview request.
+                await negotiated.Task.WaitAsync(startup.Token);
+                await server.Call("thread/realtime/appendText", new { threadId, text = "Say exactly: Merhaba, SesKöprüsü ile Türkçe ses örneğini dinliyorsunuz." }, startup.Token);
+                resume.TrySetResult();
+                while (true)
+                {
+                    await await Task.WhenAny(events, ended.Task, Task.Delay(100, token));
+                    long last = Interlocked.Read(ref lastSpeech);
+                    if (last != 0 && Environment.TickCount64 - last > 1800) return;
+                }
+            }
+            resume.TrySetResult();
+            using var capture = new WasapiCapture(microphone) { WaveFormat = format };
+            capture.DataAvailable += (_, e) =>
+            {
+                for (int offset = 0; offset + 1 < e.BytesRecorded;)
+                {
+                    int count = Math.Min(160, (e.BytesRecorded - offset) / 2);
+                    var payload = new byte[count];
+                    for (int i = 0; i < count; i++, offset += 2)
+                        payload[i] = MuLawEncoder.LinearToMuLawSample(BitConverter.ToInt16(e.Buffer, offset));
+                    peer.SendAudio((uint)count, payload);
+                }
+            };
+            capture.RecordingStopped += (_, e) => ended.TrySetException(e.Exception ?? new IOException("Audio capture stopped."));
+            capture.StartRecording();
+            await await Task.WhenAny(events, ended.Task.WaitAsync(token));
         }
-        while (buffer!.BufferedBytes > 0) await Task.Delay(60, token);
-        await Task.Delay(100, token);
+        finally
+        {
+            eventsLifetime.Cancel();
+            resume.TrySetCanceled();
+            try { await events; } catch { /* Preserve the original result. */ }
+        }
+
+        async Task ReadEvents()
+        {
+            while (true)
+            {
+                var message = await server.NextEvent(eventsLifetime.Token);
+                if (!message.TryGetProperty("method", out var method) || !message.TryGetProperty("params", out var p) ||
+                    !p.TryGetProperty("threadId", out var id) || id.GetString() != threadId) continue;
+                if (method.GetString() == "thread/realtime/sdp")
+                {
+                    var result = peer.setRemoteDescription(new RTCSessionDescriptionInit { type = RTCSdpType.answer, sdp = p.GetProperty("sdp").GetString() });
+                    if (result != SetDescriptionResultEnum.OK) throw new IOException($"Codex WebRTC negotiation failed ({result}).");
+                    negotiated.TrySetResult();
+                    await resume.Task.WaitAsync(eventsLifetime.Token);
+                }
+                if (method.GetString() == "thread/realtime/error") throw new IOException("Codex voice: " + AccountServer.Detail(p, "message"));
+                if (method.GetString() == "thread/realtime/closed") throw new IOException("Codex voice closed: " + AccountServer.Detail(p, "reason"));
+            }
+        }
     }
 
     public static async Task Preview(string voice, CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(1));
-        using var server = await AccountServer.Connect(timeout.Token, true);
-        var id = await Start(server, voice, "Read the requested sample in Turkish, exactly once.", timeout.Token);
-        await server.Call("thread/realtime/appendText", new { threadId = id, text = "Say: Merhaba, SesKöprüsü ile Türkçe ses örneğini dinliyorsunuz." }, timeout.Token);
         using var devices = new MMDeviceEnumerator();
         using var speakers = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-        await Play(server, id, speakers, true, timeout.Token);
+        await Run(voice, "Read the requested sample in Turkish, exactly once.", null, speakers, timeout.Token);
     }
 }
