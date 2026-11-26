@@ -6,7 +6,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets/SesKoprusu.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Resource Include="Assets/SesKoprusuLogo.png" />
+    <Resource Include="Assets/SesKoprusu.ico" />
+  </ItemGroup>
+
   <ItemGroup><PackageReference Include="NAudio" Version="2.2.1" /></ItemGroup>
+  <ItemGroup><PackageReference Include="SIPSorcery" Version="10.0.17" /></ItemGroup>
 </Project>

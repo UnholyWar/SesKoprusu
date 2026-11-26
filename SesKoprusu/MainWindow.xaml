@@ -1,16 +1,202 @@
-<Window x:Class="SesKoprusu.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SesKöprüsü" Width="600" Height="560" Closing="OnClosing">
- <DockPanel>
-  <Menu DockPanel.Dock="Top"><MenuItem Header="Codex Ayarları" Click="SettingsClick"/></Menu>
-  <ScrollViewer><StackPanel Margin="24">
-   <ToggleButton x:Name="Route" Content="Sanal ses yönlendirmesi" Click="RouteClick" Padding="10"/>
-   <GroupBox x:Name="Settings" Header="Ses" Visibility="Collapsed" Margin="0,16"><StackPanel Margin="8">
-    <Label Target="{Binding ElementName=Voice}" Content="Yapay zekâ sesi"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged"/>
-    <Button Content="Türkçe örnek dinle" Click="PreviewClick" Margin="0,8"/>
-   </StackPanel></GroupBox>
-   <Label Target="{Binding ElementName=Prompt}" Content="Codex’e sor"/><TextBox x:Name="Prompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"/>
-   <Button x:Name="Ask" Content="Sor ve yanıtı seslendir" Click="AskClick" Margin="0,8"/>
-   <TextBox x:Name="Answer" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0"/>
-   <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,12"/>
-  </StackPanel></ScrollViewer>
- </DockPanel>
+<Window x:Class="SesKoprusu.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="SesKöprüsü" Icon="/Assets/SesKoprusu.ico" Width="560" Height="504" MinWidth="380" MinHeight="300"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
+        Background="{DynamicResource PageBrush}" Foreground="#F6F2FA" FontSize="14"
+        FontFamily="{DynamicResource InterfaceFont}" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display" Closing="OnClosing" ContentRendered="FirstRender">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="62" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <ResourceDictionary><ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary Source="Controls.xaml"/>
+        </ResourceDictionary.MergedDictionaries></ResourceDictionary>
+    </Window.Resources>
+
+    <Border BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="62"/><RowDefinition/></Grid.RowDefinitions>
+            <Border Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,0,0,1">
+                <DockPanel Margin="16,0,5,0">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button Style="{StaticResource CaptionButton}" Click="MinimizeClick" AutomationProperties.Name="Minimize" ToolTip="Minimize">
+                            <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Data="M0,5 H10"/>
+                        </Button>
+                        <Button Click="MaximizeClick">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+                                    <Setter Property="AutomationProperties.Name" Value="Maximize"/><Setter Property="ToolTip" Value="Maximize"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
+                                            <Setter Property="AutomationProperties.Name" Value="Restore down"/><Setter Property="ToolTip" Value="Restore down"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <Path Stroke="#E6E0EF">
+                                <Path.Style><Style TargetType="Path">
+                                    <Setter Property="Data" Value="M0,0 H10 V10 H0 Z"/>
+                                    <Style.Triggers><DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
+                                        <Setter Property="Data" Value="M0,3 H8 V11 H0 Z M3,2 V0 H11 V8 H9"/>
+                                    </DataTrigger></Style.Triggers>
+                                </Style></Path.Style>
+                            </Path>
+                        </Button>
+                        <Button Style="{StaticResource CaptionButton}" Tag="Close" Click="CloseClick" AutomationProperties.Name="Close" ToolTip="Close">
+                            <Path Stroke="#F6F2FA" Data="M0,0 L10,10 M10,0 L0,10"/>
+                        </Button>
+                    </StackPanel>
+                    <!-- The unoccupied caption remains native draggable, including when maximized. -->
+                    <ContentControl Content="SesKöprüsü" ContentTemplate="{StaticResource Brand}" Width="90" Height="56" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Visibility, ElementName=Workspace}"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center" Focusable="False" IsHitTestVisible="False"/>
+                </DockPanel>
+            </Border>
+
+            <Grid x:Name="Workspace" Grid.Row="1" Visibility="Collapsed">
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="20,15,20,9">
+                        <DockPanel MaxWidth="730">
+                            <Button x:Name="Nav" DockPanel.Dock="Right" Click="SettingsClick" Content="Codex Settings" Margin="8,0,0,0"/>
+                            <TextBlock x:Name="PageTitle" Text="Audio bridge" FontSize="26" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource DisplayFont}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+                    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel MaxWidth="730" Margin="20,5,20,10">
+                        <StackPanel x:Name="HomePane">
+                            <Border Style="{StaticResource Card}" Padding="0" ClipToBounds="True">
+                                <Border.Background><LinearGradientBrush StartPoint="0,1" EndPoint="1,0">
+                                    <GradientStop Color="#272131"/><GradientStop Color="#382947" Offset=".72"/><GradientStop Color="#493259" Offset="1"/>
+                                </LinearGradientBrush></Border.Background>
+                                <Grid>
+                                    <Canvas Width="130" Height="50" HorizontalAlignment="Right" VerticalAlignment="Top" IsHitTestVisible="False" Opacity=".35">
+                                        <Path Fill="#E2CBFF" Data="M25,12 l1,3 3,1 -3,1 -1,3 -1,-3 -3,-1 3,-1 Z M86,25 l1,2 2,1 -2,1 -1,2 -1,-2 -2,-1 2,-1 Z"/>
+                                        <Path Stroke="#C9A7E7" StrokeThickness="2" Data="M7,28h1 M59,7h1 M110,11h2"/>
+                                    </Canvas>
+                                    <DockPanel Margin="18,15">
+                                        <ToggleButton DockPanel.Dock="Right" x:Name="Route" Style="{StaticResource BridgeSwitch}" Margin="14,0,0,0"
+                                                      VerticalAlignment="Center" AutomationProperties.Name="Enable audio bridge" Click="RouteClick"/>
+                                        <StackPanel>
+                                            <TextBlock x:Name="BridgeState" Text="Bridge off" Style="{StaticResource Heading}"/>
+                                            <TextBlock x:Name="BridgeHint" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="Incoming audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What you hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
+                                    <ComboBox Grid.Column="1" x:Name="Incoming" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language to hear translated audio, or Keep original to hear the source." AutomationProperties.Name="Incoming target language"/>
+                                    <Border Grid.Row="1" Grid.ColumnSpan="2" Height="1" Margin="0,14" Background="{StaticResource EdgeBrush}"/>
+                                    <StackPanel Grid.Row="2" Margin="0,0,8,0"><TextBlock Text="Outgoing audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What others hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
+                                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Outgoing" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language for your microphone, or Keep original to send your own voice." AutomationProperties.Name="Outgoing target language"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                        <StackPanel x:Name="Settings" Visibility="Collapsed">
+                            <TabControl BorderThickness="0" Background="Transparent" Padding="0,9,0,0" Foreground="#F6F2FA">
+                                <TabItem Header="Account">
+                                    <Border Style="{StaticResource Card}"><StackPanel>
+                                        <TextBlock Text="ChatGPT account" Style="{StaticResource Heading}"/>
+                                        <TextBlock Text="Sign in through your browser. Your session is saved for the next launch." Style="{StaticResource Hint}"/>
+                                        <WrapPanel>
+                                            <Button x:Name="Login" Click="LoginClick" Content="Sign in with a device code" Style="{StaticResource Primary}"/>
+                                            <Button x:Name="Test" Click="TestClick" Content="Refresh status"/>
+                                            <Button x:Name="CancelLogin" Content="Cancel sign-in" Visibility="Collapsed" Click="CancelClick"/>
+                                        </WrapPanel>
+                                        <StackPanel x:Name="Challenge" Visibility="Collapsed" Margin="0,12">
+                                            <TextBlock Text="Enter this code on the ChatGPT verification page." Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
+                                            <TextBox x:Name="UserCode" IsReadOnly="True" FontFamily="Cascadia Mono, Consolas" FontSize="22" Padding="9,5"
+                                                     Foreground="#F4ECFF" Background="#15121C" BorderBrush="#725E86" AutomationProperties.Name="One-time device code"/>
+                                            <TextBlock Text="Keep this one-time code private." Style="{StaticResource Hint}"/>
+                                            <Button Content="Open verification page ↗" Click="VerificationClick" HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                        <Border Background="{StaticResource EdgeBrush}" Height="1" Margin="0,10"/>
+                                        <TextBlock Text="Reconnect to retry your saved session. Enable device codes in account security if prompted." Style="{StaticResource Hint}"/>
+                                        <WrapPanel><Button x:Name="Reconnect" Content="Reconnect to App Server" Click="ReconnectClick"/>
+                                            <Button Content="Account security ↗" Click="SecurityClick"/></WrapPanel>
+                                    </StackPanel></Border>
+                                </TabItem>
+                                <TabItem x:Name="DeviceTab" Header="Devices">
+                                    <StackPanel>
+                                        <Border Style="{StaticResource Card}"><StackPanel>
+                                            <TextBlock Text="Microphone route" Style="{StaticResource Heading}"/>
+                                            <TextBlock x:Name="MicPath" Margin="0,8,0,4" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="MicSignal" Visibility="Collapsed" Foreground="{StaticResource AccentBrush}" Margin="0,6,0,6" TextWrapping="Wrap"/>
+                                            <WrapPanel><Button x:Name="MicSetup" Style="{StaticResource Primary}" Click="RepairClick" Visibility="Collapsed"/>
+                                                <Button Content="Windows sound settings ↗" Click="SoundSettingsClick"/></WrapPanel>
+                                        </StackPanel></Border>
+                                        <Border Style="{StaticResource Card}"><StackPanel>
+                                            <TextBlock Text="Virtual audio devices" Style="{StaticResource Heading}"/>
+                                            <ItemsControl x:Name="DriverState" Margin="0,6,0,2">
+                                                <ItemsControl.ItemTemplate><DataTemplate>
+                                                    <Border BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,0,0,1" Padding="0,8">
+                                                        <StackPanel>
+                                                            <DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Requirement}" Foreground="{StaticResource AccentBrush}" FontSize="12"/>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/></DockPanel>
+                                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Hint}" Margin="0,3,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate></ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock x:Name="DeviceHint" Style="{StaticResource Hint}"/>
+                                            <WrapPanel><Button Style="{StaticResource Primary}" x:Name="Repair" Visibility="Collapsed" Content="Set up driver" Click="RepairClick"/>
+                                                <Button x:Name="ImportPackage" Visibility="Collapsed" Content="Use downloaded ZIP…" Click="RepairClick"/>
+                                                <Button x:Name="DeviceRefresh" Content="Refresh devices" Click="RefreshDevicesClick"/></WrapPanel>
+                                        </StackPanel></Border>
+                                    </StackPanel>
+                                </TabItem>
+                                <TabItem Header="Voice">
+                                    <Border Style="{StaticResource Card}"><StackPanel>
+                                        <TextBlock Text="Interpreter voices" Style="{StaticResource Heading}"/>
+                                        <TextBlock x:Name="SpeechState" Text="Sign in to preview voices from your Codex session." Style="{StaticResource Hint}"/>
+                                        <TextBlock Text="Incoming voice · What you hear" Style="{StaticResource FieldLabel}"/>
+                                        <DockPanel><Button x:Name="Preview" DockPanel.Dock="Right" Margin="8,0,0,0" Content="Preview" AutomationProperties.Name="Preview incoming voice" Click="PreviewClick"/>
+                                            <ComboBox x:Name="Voice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Incoming translation voice"/></DockPanel>
+                                        <TextBlock Text="Outgoing voice · What others hear" Style="{StaticResource FieldLabel}" Margin="0,13,0,5"/>
+                                        <DockPanel><Button x:Name="PreviewSend" DockPanel.Dock="Right" Margin="8,0,0,0" Content="Preview" AutomationProperties.Name="Preview outgoing voice" Click="PreviewClick"/>
+                                            <ComboBox x:Name="SendVoice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Outgoing translation voice"/></DockPanel>
+                                        <TextBlock x:Name="RecorderHint" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+                                    </StackPanel></Border>
+                                </TabItem>
+                                <TabItem Header="Updates">
+                                    <Border Style="{StaticResource Card}"><StackPanel>
+                                        <TextBlock Text="Windows updates" Style="{StaticResource Heading}"/>
+                                        <TextBlock x:Name="UpdateState" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Turn off the bridge before installing a new version. Your saved settings carry over." Style="{StaticResource Hint}"/>
+                                        <Button x:Name="UpdateButton" Style="{StaticResource Primary}" HorizontalAlignment="Left" Content="Check for updates" Click="UpdateClick"/>
+                                    </StackPanel></Border>
+                                </TabItem>
+                            </TabControl>
+                        </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <StackPanel Grid.Row="1" Margin="16,0">
+                    <ProgressBar x:Name="Transfer" Visibility="Collapsed" Height="4" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Transfer progress"/>
+                    <Border Background="#292230" CornerRadius="6" Padding="10,7" Margin="0,3,0,7">
+                        <Border.Style><Style TargetType="Border"><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=Status}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Border.Style>
+                        <ScrollViewer MaxHeight="68" VerticalScrollBarVisibility="Auto"><TextBlock x:Name="Status" AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap"/></ScrollViewer>
+                    </Border>
+                </StackPanel>
+                <Border Grid.Row="2" Padding="18,8" Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,1,0,0">
+                    <TextBlock x:Name="SessionState" Text="Checking Codex connection…" Style="{StaticResource Hint}" Margin="0" AutomationProperties.LiveSetting="Polite"/>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="LaunchScreen" Grid.Row="1" Background="{StaticResource PageBrush}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                    <ContentControl Content="SesKöprüsü" Width="250" Height="156" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" HorizontalAlignment="Center" ContentTemplate="{StaticResource Brand}" Focusable="False"/>
+                    <TextBlock Text="Loading audio settings…" Style="{StaticResource Hint}" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
 </Window>
