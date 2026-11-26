@@ -3,10 +3,12 @@
 Derleme makinesinde .NET 10 SDK ve Inno Setup 6 kurulu olmalı. ISCC.exe dosyasını PATH'e ekleyin. Resmî VB-CABLE Windows paketini https://vb-audio.com/Cable/ adresinden indirip bir klasöre çıkarın. Paketi başkalarına dağıtmadan önce sürücünün dağıtım koşullarını kontrol edin.
 
 ~~~powershell
-.\setup\Build.ps1 -CablePackageDirectory C:\Drivers\VB-CABLE
+.\setup\Build.ps1 -CablePackageDirectory C:\Drivers\VB-CABLE -CodexDirectory C:\Tools\Codex-x64
 ~~~
 
-setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sürücü sihirbazını tamamlayıp Windows'u yeniden başlatın. İlk çalıştırmada Windows varsayılan çıkışını dinleyeceğiniz fiziksel aygıta ayarlayın. Seslendirme için uygulamayı başlatmadan önce OPENAI_API_KEY ortam değişkenini tanımlayın. SESKOPRUSU_CODEX_MODEL ile hesabınızdaki Responses API uyumlu Codex modelini seçebilirsiniz.
+CodexDirectory için resmî Windows x64 Codex CLI paketinin codex.exe ve yardımcı dosyalarını içeren klasörü kullanın. Uygulama açılınca Codex Ayarları üzerinden cihaz koduyla giriş yapın. Parola ve ikinci doğrulama adımı tarayıcıdaki ChatGPT giriş sayfasında tamamlanır. Oturum SesKöprüsü için ayrı tutulur.
+
+setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sürücü sihirbazını tamamlayıp Windows'u yeniden başlatın. İlk çalıştırmada Windows varsayılan çıkışını dinleyeceğiniz fiziksel aygıta ayarlayın. Seslendirme için uygulamayı başlatmadan önce OPENAI_API_KEY ortam değişkenini tanımlayın. SESKOPRUSU_CODEX_MODEL ile hesabınızdaki CLI uyumlu Codex modelini seçebilirsiniz.
 
 ## Windows kabul testi
 

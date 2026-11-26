@@ -1,16 +1,36 @@
-<Window x:Class="SesKoprusu.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SesKöprüsü" Width="600" Height="560" Closing="OnClosing">
+<Window x:Class="SesKoprusu.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SesKöprüsü" Width="820" Height="740" MinWidth="510" MinHeight="480" Background="#F1F4F5" FontFamily="Segoe UI" FontSize="15" Closing="OnClosing">
+ <Window.Resources>
+  <Style TargetType="Button"><Setter Property="Padding" Value="15,8"/><Setter Property="Background" Value="#176157"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/></Style>
+  <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="White"/><Setter Property="Padding" Value="22"/><Setter Property="CornerRadius" Value="12"/><Setter Property="Margin" Value="0,0,0,14"/></Style>
+  <Style x:Key="Heading" TargetType="TextBlock"><Setter Property="FontSize" Value="20"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="#173F3B"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
+ </Window.Resources>
  <DockPanel>
-  <Menu DockPanel.Dock="Top"><MenuItem Header="Codex Ayarları" Click="SettingsClick"/></Menu>
-  <ScrollViewer><StackPanel Margin="24">
-   <ToggleButton x:Name="Route" Content="Sanal ses yönlendirmesi" Click="RouteClick" Padding="10"/>
-   <GroupBox x:Name="Settings" Header="Ses" Visibility="Collapsed" Margin="0,16"><StackPanel Margin="8">
-    <Label Target="{Binding ElementName=Voice}" Content="Yapay zekâ sesi"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged"/>
-    <Button Content="Türkçe örnek dinle" Click="PreviewClick" Margin="0,8"/>
-   </StackPanel></GroupBox>
-   <Label Target="{Binding ElementName=Prompt}" Content="Codex’e sor"/><TextBox x:Name="Prompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"/>
-   <Button x:Name="Ask" Content="Sor ve yanıtı seslendir" Click="AskClick" Margin="0,8"/>
-   <TextBox x:Name="Answer" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0"/>
-   <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,12"/>
+  <Border DockPanel.Dock="Top" Background="#103E3A" Padding="26,18"><DockPanel>
+   <Button DockPanel.Dock="Right" Content="Codex Ayarları" Click="SettingsClick"/>
+   <TextBlock Text="SesKöprüsü" FontSize="27" FontWeight="SemiBold" Foreground="White"/>
+  </DockPanel></Border>
+  <TextBlock DockPanel.Dock="Bottom" x:Name="Status" TextWrapping="Wrap" Margin="26,6,26,14" Foreground="#364943"/>
+  <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24">
+   <Border Style="{StaticResource Card}" x:Name="Settings"><StackPanel>
+    <TextBlock Style="{StaticResource Heading}" Text="Hesap bağlantısı"/>
+    <TextBlock x:Name="SessionState" Text="Oturum denetleniyor…" FontWeight="SemiBold"/>
+    <TextBlock TextWrapping="Wrap" Margin="0,6,0,12" Text="ChatGPT güvenlik ayarlarında Codex, Excel, PowerPoint ve Word için cihaz koduyla girişi etkinleştirin. Kendi başlattığınız girişin kodunu yalnızca resmî giriş sayfasına yazın. Cihaz kodunu asla paylaşmayın."/>
+    <WrapPanel><Button x:Name="Login" Content="Cihaz koduyla giriş yap" Click="LoginClick" Margin="0,0,8,6"/><Button Content="Hesap güvenliği ↗" Click="SecurityClick" Margin="0,0,0,6"/></WrapPanel>
+    <Separator Margin="0,14"/>
+    <Label Content="Seslendirme sesi" Target="{Binding ElementName=Voice}"/>
+    <DockPanel><Button x:Name="Preview" DockPanel.Dock="Right" Content="Örneği dinle" Click="PreviewClick" Margin="10,0,0,0"/><ComboBox x:Name="Voice" VerticalContentAlignment="Center" SelectionChanged="VoiceChanged"/></DockPanel>
+    <TextBlock x:Name="SpeechState" Margin="0,6,0,0" TextWrapping="Wrap"/>
+   </StackPanel></Border>
+   <Border Style="{StaticResource Card}"><DockPanel>
+    <ToggleButton x:Name="Route" DockPanel.Dock="Right" Padding="16,6" Content="Yönlendir" Click="RouteClick"/>
+    <TextBlock Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" Text="Ses yönlendirmesi"/>
+   </DockPanel></Border>
+   <Border Style="{StaticResource Card}"><StackPanel>
+    <TextBlock Text="Codex’e sor" Style="{StaticResource Heading}"/>
+    <TextBox x:Name="Prompt" AutomationProperties.Name="Sorunuz" MinHeight="80" Padding="10" TextWrapping="Wrap" AcceptsReturn="True"/>
+    <Button x:Name="Ask" Content="Sor" HorizontalAlignment="Right" Margin="0,10,0,0" Click="AskClick"/>
+    <TextBox x:Name="Answer" AutomationProperties.Name="Codex yanıtı" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Margin="0,10,0,0"/>
+   </StackPanel></Border>
   </StackPanel></ScrollViewer>
  </DockPanel>
 </Window>

@@ -4,7 +4,7 @@ using System.Media;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text.Json;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -19,6 +19,45 @@ public partial class MainWindow : Window
     readonly CancellationTokenSource lifetime = new();
     bool ownsInstance;
     bool ready;
+    bool signedIn;
+    bool busy;
+    bool HasSpeechKey => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
+
+    void UpdateControls()
+    {
+        Login.IsEnabled = ready && !busy && !signedIn;
+        Ask.IsEnabled = Prompt.IsEnabled = ready && signedIn && !busy;
+        Preview.IsEnabled = Ask.IsEnabled && HasSpeechKey;
+        Route.IsEnabled = ready && !busy && (routing.Pending || signedIn);
+        Ask.Content = HasSpeechKey ? "Sor ve seslendir" : "Sor";
+        SpeechState.Text = HasSpeechKey ? "OpenAI ses API anahtarı tanımlı." : "Sesli okuma için OPENAI_API_KEY tanımlayın. Codex yanıtları metin olarak gösterilir.";
+    }
+
+    async Task<bool> CheckSession()
+    {
+        signedIn = false;
+        try { signedIn = await CodexSession.SignedIn(lifetime.Token); }
+        catch (Exception ex) { Status.Text = ex.Message; }
+        SessionState.Text = signedIn ? "ChatGPT oturumu açık" : "Oturum açmanız gerekiyor";
+        UpdateControls();
+        return signedIn;
+    }
+
+    async void LoginClick(object sender, RoutedEventArgs e)
+    {
+        busy = true;
+        UpdateControls();
+        SessionState.Text = "Açılan Codex penceresindeki adımları tamamlayın…";
+        try { await CodexSession.Login(lifetime.Token); }
+        catch (Exception ex) { Status.Text = ex.Message; }
+        finally { await CheckSession(); busy = false; UpdateControls(); }
+    }
+
+    void SecurityClick(object sender, RoutedEventArgs e)
+    {
+        try { Process.Start(new ProcessStartInfo("https://chatgpt.com/#settings/Security") { UseShellExecute = true }); }
+        catch (Exception ex) { Status.Text = ex.Message; }
+    }
 
     public MainWindow()
     {
@@ -37,6 +76,8 @@ public partial class MainWindow : Window
         try { routing.Restore(); } catch (Exception ex) { Status.Text = ex.Message; }
         Route.IsChecked = routing.Pending;
         ready = true;
+        UpdateControls();
+        Loaded += async (_, _) => await CheckSession();
     }
 
     void SettingsClick(object sender, RoutedEventArgs e) =>
@@ -49,15 +90,22 @@ public partial class MainWindow : Window
         catch (Exception ex) { Status.Text = "Ses tercihi kaydedilemedi. " + ex.Message; }
     }
 
-    void RouteClick(object sender, RoutedEventArgs e)
+    async void RouteClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            if (Route.IsChecked == true) routing.Enable(); else routing.Restore();
+            if (!routing.Pending)
+            {
+                busy = true;
+                UpdateControls();
+                if (!await CheckSession()) return;
+                routing.Enable();
+            }
+            else routing.Restore();
             Status.Text = routing.Pending ? "Sanal yönlendirme açık." : "Önceki aygıtlar geri yüklendi.";
         }
         catch (Exception ex) { Status.Text = ex.Message; }
-        Route.IsChecked = routing.Pending;
+        finally { busy = false; Route.IsChecked = routing.Pending; UpdateControls(); }
     }
 
     async Task<HttpResponseMessage> Post(string path, object body)
@@ -91,11 +139,12 @@ public partial class MainWindow : Window
 
     async Task RunAudio(Func<Task> action)
     {
-        Ask.IsEnabled = Settings.IsEnabled = false;
+        busy = true;
+        UpdateControls();
         Status.Text = "İşleniyor…";
-        try { await action(); Status.Text = "Tamamlandı."; }
+        try { if (!await CheckSession()) { Status.Text = "Devam etmek için Codex Ayarları üzerinden oturum açın."; return; } await action(); Status.Text = "Tamamlandı."; }
         catch (Exception ex) { Status.Text = ex.Message; }
-        finally { Ask.IsEnabled = Settings.IsEnabled = true; }
+        finally { busy = false; UpdateControls(); }
     }
 
     async void PreviewClick(object sender, RoutedEventArgs e) =>
@@ -106,15 +155,8 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(Prompt.Text)) return;
         await RunAudio(async () =>
         {
-            using var response = await Post("responses", new { model = Environment.GetEnvironmentVariable("SESKOPRUSU_CODEX_MODEL") ?? "gpt-5.1-codex", input = Prompt.Text });
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(lifetime.Token));
-            Answer.Text = string.Join("\n", json.RootElement.GetProperty("output").EnumerateArray()
-                .Where(item => item.GetProperty("type").GetString() == "message")
-                .SelectMany(item => item.GetProperty("content").EnumerateArray())
-                .Where(part => part.GetProperty("type").GetString() == "output_text")
-                .Select(part => part.GetProperty("text").GetString()));
-            if (Answer.Text.Length == 0) throw new InvalidOperationException("Seslendirilecek yanıt alınamadı.");
-            await Speak(Answer.Text);
+            Answer.Text = await CodexSession.Ask(Prompt.Text, lifetime.Token);
+            if (HasSpeechKey) await Speak(Answer.Text);
         });
     }
 
