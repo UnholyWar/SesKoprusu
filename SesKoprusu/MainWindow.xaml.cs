@@ -26,7 +26,7 @@ public partial class MainWindow : Window
 
     void UpdateControls()
     {
-        ImportPackage.IsEnabled = Repair.IsEnabled = DeviceRefresh.IsEnabled = ready && !busy && !routing.Pending;
+        MicSetup.IsEnabled = ImportPackage.IsEnabled = Repair.IsEnabled = DeviceRefresh.IsEnabled = ready && !busy && !routing.Pending;
         UpdateButton.IsEnabled = ready && !busy && !routing.Pending;
         Login.Content = signedIn ? "Sign in again" : "Sign in with a device code";
         Login.IsEnabled = ready && !busy && !routing.Pending;
@@ -215,13 +215,27 @@ public partial class MainWindow : Window
     string IncomingMode => (string)Incoming.SelectedItem;
     string OutgoingMode => (string)Outgoing.SelectedItem;
 
+    string MicSetupCable => Routing.Translates(OutgoingMode) ? Routing.MicrophoneCable(IncomingMode) : Routing.MicrophoneCable(Routing.Original);
+
+    void SoundSettingsClick(object sender, RoutedEventArgs e) => OpenPage("ms-settings:sound");
+
     void RefreshDrivers()
     {
         var inventory = routing.Inspect(IncomingMode, OutgoingMode);
+        var microphone = inventory.Single(d => d.Name == MicSetupCable);
+        string hint = Routing.Translates(OutgoingMode) ? $"Target: {OutgoingMode}" :
+            "For a microphone-only test, select Keep original for incoming audio and a language for outgoing audio.";
+        MicPath.Text = $"Source: {routing.MicrophoneName()}\nRecorder input: {microphone.Name} Output\n{hint}\n" +
+            (microphone.Ready ? "Microphone driver ready." : microphone.CanEnable ? "Virtual microphone disabled." :
+             microphone.Installed ? "Driver installed. Check endpoint visibility in Windows Sound." : "Virtual microphone driver required.");
+        MicSetup.Content = microphone.CanEnable ? "Enable microphone devices" : $"Set up microphone driver ({microphone.Name})";
+        bool needsLicensedZip = microphone.Name == "CABLE-A" && microphone.NeedsInstall && !DriverSetup.HasPackage("CABLE-A");
+        MicSetup.Visibility = microphone.CanEnable || (microphone.NeedsInstall && !needsLicensedZip) ? Visibility.Visible : Visibility.Collapsed;
         DriverState.Text = string.Join("\n\n", inventory.Select(d => d.Description));
         var unavailable = inventory.FirstOrDefault(d => d.Required && !d.Ready);
-        Repair.Visibility = unavailable is { CanEnable: true } or { NeedsInstall: true } ? Visibility.Visible : Visibility.Collapsed;
-        ImportPackage.Visibility = unavailable is { Name: "CABLE", NeedsInstall: true } && !DriverSetup.HasPackage("CABLE") ? Visibility.Visible : Visibility.Collapsed;
+        Repair.Visibility = unavailable != microphone && (unavailable is { CanEnable: true } or { NeedsInstall: true }) ? Visibility.Visible : Visibility.Collapsed;
+        ImportPackage.Visibility = unavailable is { NeedsInstall: true } && !DriverSetup.HasPackage(unavailable.Name) ? Visibility.Visible : Visibility.Collapsed;
+        ImportPackage.Content = unavailable?.Name == "CABLE-A" ? "Import licensed A+B ZIP…" : "Use downloaded ZIP…";
         License.Visibility = unavailable is { Name: "CABLE-A", NeedsInstall: true } && !DriverSetup.HasPackage("CABLE-A") ? Visibility.Visible : Visibility.Collapsed;
         Repair.Content = unavailable?.CanEnable == true ? "Enable devices" :
             unavailable != null && DriverSetup.HasPackage(unavailable.Name) ? "Install local package" : "Set up driver";
@@ -243,17 +257,24 @@ public partial class MainWindow : Window
         UpdateControls();
         try
         {
-            var device = routing.Inspect(IncomingMode, OutgoingMode).FirstOrDefault(d => d.Required && !d.Ready);
+            var inventory = routing.Inspect(IncomingMode, OutgoingMode);
+            var device = sender == MicSetup ? inventory.Single(d => d.Name == MicSetupCable) :
+                inventory.FirstOrDefault(d => d.Required && !d.Ready);
             if (device == null) { Status.Text = "Audio devices are ready."; return; }
             if (device.CanEnable) routing.EnableDisabled(device.Name);
             else if (device.NeedsInstall)
             {
                 string? zip = null;
-                if (sender == ImportPackage || (device.Name == "CABLE-A" && !DriverSetup.HasPackage(device.Name)))
+                if (sender == ImportPackage)
                 {
                     var picker = new Microsoft.Win32.OpenFileDialog { Filter = "VB-Audio driver package|*.zip", Title = $"Select the official {device.Name} driver ZIP" };
                     if (picker.ShowDialog(this) != true) return;
                     zip = picker.FileName;
+                }
+                if (device.Name == "CABLE-A" && zip == null && !DriverSetup.HasPackage(device.Name))
+                {
+                    Status.Text = "For two-way translation, use Import licensed A+B ZIP. For a microphone-only test, set incoming audio to Keep original.";
+                    return;
                 }
                 await DriverSetup.Install(http, device.Name, zip, Progress, lifetime.Token);
             }
@@ -265,7 +286,7 @@ public partial class MainWindow : Window
 
     void TryRefreshDrivers()
     {
-        try { RefreshDrivers(); } catch (Exception ex) { DriverState.Text = "Device inventory unavailable."; DeviceHint.Text = ex.Message; ImportPackage.Visibility = Repair.Visibility = License.Visibility = Visibility.Collapsed; }
+        try { RefreshDrivers(); } catch (Exception ex) { DriverState.Text = "Device inventory unavailable."; DeviceHint.Text = ex.Message; MicPath.Text = "Microphone status unavailable."; MicSetup.Visibility = ImportPackage.Visibility = Repair.Visibility = License.Visibility = Visibility.Collapsed; }
     }
 
     void LanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -320,18 +341,20 @@ public partial class MainWindow : Window
                 }
                 if (!await CheckSession()) return;
                 string incoming = (string)Incoming.SelectedItem, outgoing = (string)Outgoing.SelectedItem;
-                routing.Enable(incoming, outgoing, (string)Voice.SelectedItem, (string)SendVoice.SelectedItem, error => Dispatcher.InvokeAsync(() =>
+                Status.Text = Routing.Translates(incoming) && Routing.Translates(outgoing)
+                    ? "Connecting incoming audio and outgoing microphone…" : "Connecting audio…";
+                await routing.EnableAsync(incoming, outgoing, (string)Voice.SelectedItem, (string)SendVoice.SelectedItem, error => Dispatcher.InvokeAsync(() =>
                 {
                     try { routing.Restore(); Status.Text = error; }
                     catch (Exception ex) { Status.Text = ex.Message; }
                     Route.IsChecked = routing.Pending;
                     UpdateControls();
-                }));
+                }), lifetime.Token);
             }
             else routing.Restore();
             Status.Text = routing.Pending && Routing.Translates(OutgoingMode)
-                ? $"Translated microphone → {Routing.MicrophoneCable(IncomingMode)} Output. Open Windows Sound Recorder to record."
-                : routing.Pending ? "Audio bridge is on." : "Your previous devices have been restored.";
+                ? (Routing.Translates(IncomingMode) ? $"Headphones: {IncomingMode}. " : "") + $"Microphone: {OutgoingMode} → {Routing.MicrophoneCable(IncomingMode)} Output."
+                : routing.Pending ? "Audio bridge is on. Your microphone sends its original audio." : "Your previous devices have been restored.";
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { busy = false; Route.IsChecked = routing.Pending; UpdateControls(); }

@@ -49,7 +49,22 @@ internal sealed class Routing
         };
     }
 
-    public static string MicrophoneCable(string incoming) => incoming == Original ? "CABLE" : "CABLE-A";
+    public static string MicrophoneCable(string incoming) => Translates(incoming) ? "CABLE-A" : "CABLE";
+
+    static bool RoutePlayback(string incoming, string outgoing) =>
+        Translates(incoming) || (incoming == Monitor && !Translates(outgoing));
+
+    public string MicrophoneName()
+    {
+        try
+        {
+            var original = Pending ? Local.Read<Endpoint[]>("routing").FirstOrDefault(e =>
+                e.Flow == DataFlow.Capture && e.Role == Role.Multimedia) : null;
+            using var mic = original == null ? devices.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia) : devices.GetDevice(original.Id);
+            return mic.FriendlyName;
+        }
+        catch (COMException) { return "Unavailable · select a microphone in Windows Sound"; }
+    }
 
     public List<CableStatus> Inspect(string incoming, string outgoing)
     {
@@ -61,7 +76,7 @@ internal sealed class Routing
             using var recording = FindCable(DataFlow.Capture, prefix + " Output", DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
             var description = prefix == "CABLE" ? "VB-Audio Virtual Cable" : "VB-Audio Cable A";
             bool present = controllers.Any(n => string.Equals(n, description, StringComparison.OrdinalIgnoreCase)) || playback != null || recording != null;
-            result.Add(new(prefix, (prefix == "CABLE" && incoming != Original) || (Translates(outgoing) && prefix == MicrophoneCable(incoming)), present, playback?.State, recording?.State));
+            result.Add(new(prefix, (prefix == "CABLE" && RoutePlayback(incoming, outgoing)) || (Translates(outgoing) && prefix == MicrophoneCable(incoming)), present, playback?.State, recording?.State));
         }
         return result;
     }
@@ -87,12 +102,12 @@ internal sealed class Routing
         return device;
     }
 
-    public void Enable(string incoming, string outgoing, string incomingVoice, string outgoingVoice, Action<string> failed)
+    public async Task EnableAsync(string incoming, string outgoing, string incomingVoice, string outgoingVoice, Action<string> failed, CancellationToken token)
     {
         if (Pending) throw new InvalidOperationException("Restore the previous devices first.");
         var flows = new List<DataFlow>();
-        if (incoming != Original) flows.Add(DataFlow.Render);
-        if (Translates(outgoing) || (incoming == Monitor && outgoing == Monitor)) flows.Add(DataFlow.Capture);
+        if (RoutePlayback(incoming, outgoing)) flows.Add(DataFlow.Render);
+        if (Translates(outgoing)) flows.Add(DataFlow.Capture);
         if (flows.Count == 0) throw new InvalidOperationException("Both directions use the original audio. No routing is needed.");
         var saved = (from flow in flows from role in Roles select new Endpoint(flow, role, DefaultId(flow, role))).ToArray();
         Local.Save("routing", saved);
@@ -107,21 +122,20 @@ internal sealed class Routing
                 var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Multimedia).Id));
                 if (mic.ID == virtualMic.ID || mic.FriendlyName.StartsWith("CABLE Output", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Select your physical microphone first.");
                 using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-                if (incoming == Original && physicalOutput.ID == send.ID)
+                if (physicalOutput.ID == send.ID)
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
-                translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, failed));
+                translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error)));
                 recordingId = virtualMic.ID;
             }
-            if (incoming != Original)
+            if (RoutePlayback(incoming, outgoing))
             {
                 using var output = Cable(DataFlow.Render, "CABLE Input");
                 renderId = output.ID;
                 var input = Hold(Cable(DataFlow.Capture, "CABLE Output"));
                 var speakers = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Render && e.Role == Role.Multimedia).Id));
                 if (speakers.ID == renderId) throw new InvalidOperationException("Select your physical speakers as the default output first.");
-                if (incoming == Monitor && outgoing == Monitor) recordingId = input.ID;
                 if (Translates(incoming))
-                    translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, failed));
+                    translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, error => failed("Incoming audio: " + error)));
                 else
                 {
                     capture = new WasapiCapture(input);
@@ -133,6 +147,18 @@ internal sealed class Routing
                     capture.StartRecording();
                 }
             }
+            // Switch Windows defaults only after every requested interpreter has opened its capture stream.
+            using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
+            startup.CancelAfter(TimeSpan.FromSeconds(60));
+            var pendingStarts = translations.Select(t => t.Ready).ToList();
+            while (pendingStarts.Count > 0)
+            {
+                var started = await Task.WhenAny(pendingStarts).WaitAsync(startup.Token);
+                await started;
+                pendingStarts.Remove(started);
+            }
+            token.ThrowIfCancellationRequested();
+            if (!Pending) throw new InvalidOperationException("Routing was stopped during startup.");
             foreach (var e in saved)
             {
                 Set(e, e.Flow == DataFlow.Render ? renderId! : recordingId!);

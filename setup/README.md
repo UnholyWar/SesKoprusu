@@ -31,3 +31,10 @@ GitHub Actions, test/ses-koprusu dalına gelen push sonrasında Windows x64 setu
 Otomatik pakette VB-CABLE yeniden dağıtılmaz. Kurulu sürücüler kullanılmaya devam eder, eksikler Devices bölümünden kurulur. Workflow için depoda Actions ve Releases yazma yetkisi gerekir. Uygulama güncelleme kanalını kimlik doğrulamasız okuduğu için release dosyaları kullanıcıya açık olmalıdır.
 
 Windows Ses Kaydedicisi testi: Anahtar kapalıyken fiziksel mikrofonu varsayılan giriş, kulaklığı varsayılan çıkış yapın. Incoming audio → Keep original ve Outgoing audio → English seçin. Köprüyü açtıktan sonra Ses Kaydedicisi’nde CABLE Output ile kayıt başlatın, Türkçe bir cümle söyleyin ve çeviri için birkaç saniye bekleyin. Kaydı durdurup kulaklıktan dinleyin. Gelen yönlendirme de açıksa giden ses CABLE-A Output üzerinden kaydedilir.
+
+### Çift yönlü görüşme testi
+
+1. Köprü kapalıyken fiziksel kulaklığı ve fiziksel mikrofonu Windows varsayılanları olarak seçin. Görüşme uygulamasını sistem varsayılanlarını kullanacak şekilde ayarlayın.
+2. Incoming → Turkish ve Outgoing → Keep original seçin. Karşı tarafın sesi kulaklığa Türkçe gelirken mikrofonunuzu doğal haliyle göndermesi beklenir.
+3. Köprüyü kapatıp Outgoing → English seçin. Devices altında hem CABLE hem CABLE-A hazır olmalı. Anahtarı açın. Görüşme uygulaması elle aygıt seçiyorsa hoparlör için CABLE Input, mikrofon için CABLE-A Output kullanın.
+4. Karşı taraf konuşurken kulaklıktan çeviriyi dinleyin. Siz Türkçe konuştuğunuzda karşı tarafın İngilizce duyduğunu doğrulayın. Sizin mikrofonunuz sessizken karşı tarafın sesi onun mikrofon girişine geri dönmemelidir. Köprüyü kapatıp önceki aygıtları kontrol edin.

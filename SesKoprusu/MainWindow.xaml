@@ -59,6 +59,10 @@
      </StackPanel></TabItem>
      <TabItem x:Name="DeviceTab" Header="Devices"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
     <TextBlock Text="Audio devices" Style="{StaticResource SectionTitle}"/>
+    <TextBlock Text="Microphone translation" FontWeight="SemiBold" Margin="0,2,0,4"/>
+    <TextBlock x:Name="MicPath" TextWrapping="Wrap"/>
+    <WrapPanel Margin="0,5,0,8"><Button x:Name="MicSetup" Style="{StaticResource Primary}" Click="RepairClick" Visibility="Collapsed"/><Button Content="Windows sound settings ↗" Click="SoundSettingsClick"/></WrapPanel>
+    <Separator Margin="0,4,0,8"/>
     <TextBlock x:Name="DriverState" TextWrapping="Wrap" Margin="0,3"/>
     <WrapPanel><Button Style="{StaticResource Primary}" x:Name="Repair" Visibility="Collapsed" Content="Set up driver" Click="RepairClick"/><Button x:Name="ImportPackage" Visibility="Collapsed" Content="Use downloaded ZIP…" Click="RepairClick"/><Button x:Name="DeviceRefresh" Content="Refresh devices" Click="RefreshDevicesClick"/><Button x:Name="License" Visibility="Collapsed" Content="Get Cable A+B ↗" Click="LicenseClick"/></WrapPanel>
     <TextBlock x:Name="DeviceHint" TextWrapping="Wrap" Margin="0,3,0,10"/>

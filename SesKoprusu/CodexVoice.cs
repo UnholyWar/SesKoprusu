@@ -18,7 +18,7 @@ internal static class CodexVoice
         return [Default, .. catalog.GetProperty("voices").GetProperty("v3").EnumerateArray().Select(x => x.GetString()!)];
     }
 
-    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token)
+    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token, Action? captureReady = null)
     {
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
         startup.CancelAfter(TimeSpan.FromSeconds(45));
@@ -116,6 +116,7 @@ internal static class CodexVoice
             };
             capture.RecordingStopped += (_, e) => ended.TrySetException(e.Exception ?? new IOException("Audio capture stopped."));
             capture.StartRecording();
+            captureReady?.Invoke();
             await await Task.WhenAny(events, ended.Task.WaitAsync(token));
         }
         finally
