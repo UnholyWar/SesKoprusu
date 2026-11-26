@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     bool ready;
     bool signedIn;
     bool busy;
-    static readonly string[] Languages = ["Pass through", "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese"];
+    static readonly string[] Languages = ["Pass through", "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese", Routing.Original];
     string SpeechKey => Key.Password.Length > 0 ? Key.Password.Trim() : Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
     bool HasSpeechKey => !string.IsNullOrWhiteSpace(SpeechKey);
     bool connected;
@@ -37,7 +37,7 @@ public partial class MainWindow : Window
         Reconnect.IsEnabled = ready && !busy;
         Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
         Preview.IsEnabled = ready && !busy && connected && HasSpeechKey;
-        Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
+        Voice.IsEnabled = SendVoice.IsEnabled = Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         Route.IsEnabled = ready && !busy && (routing.Pending || connected);
         SpeechState.Text = HasSpeechKey ? "Audio API key provided." : "Enter your API key for translation and voice previews.";
     }
@@ -170,12 +170,15 @@ public partial class MainWindow : Window
             }
         }
         catch (Exception ex) { Status.Text = ex.Message; }
-        Voice.ItemsSource = Voices;
-        Voice.SelectedIndex = 0;
+        Voice.ItemsSource = SendVoice.ItemsSource = Voices;
+        Voice.SelectedIndex = SendVoice.SelectedIndex = 0;
         try
         {
             if (Local.Has("voice") && Local.Read<string>("voice") is string voice && Voices.Contains(voice))
                 Voice.SelectedItem = voice;
+            SendVoice.SelectedItem = Voice.SelectedItem;
+            if (Local.Has("outgoingVoice") && Local.Read<string>("outgoingVoice") is string send && Voices.Contains(send))
+                SendVoice.SelectedItem = send;
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         try { routing.Restore(); } catch (Exception ex) { Status.Text = ex.Message; }
@@ -202,11 +205,12 @@ public partial class MainWindow : Window
         Status.Text = value.HasValue ? $"{label} {value:0}%" : label;
     }
 
-    bool NeedsSecondCable => Outgoing.SelectedItem is string language && language != "Pass through";
+    string IncomingMode => (string)Incoming.SelectedItem;
+    string OutgoingMode => (string)Outgoing.SelectedItem;
 
     void RefreshDrivers()
     {
-        var missing = routing.Missing(NeedsSecondCable);
+        var missing = routing.Missing(IncomingMode, OutgoingMode);
         DriverState.Text = missing == null ? "Required audio devices are ready." :
             $"{missing} is missing or disabled. Select Install or enable devices.";
     }
@@ -219,7 +223,7 @@ public partial class MainWindow : Window
         UpdateControls();
         try
         {
-            var missing = routing.Missing(NeedsSecondCable, activate: true);
+            var missing = routing.Missing(IncomingMode, OutgoingMode, activate: true);
             if (missing == null) { Status.Text = "Audio devices are ready."; return; }
             while (missing != null)
             {
@@ -231,11 +235,11 @@ public partial class MainWindow : Window
                     zip = picker.FileName;
                 }
                 await DriverSetup.Install(http, zip, Progress, lifetime.Token);
-                var remaining = routing.Missing(NeedsSecondCable, activate: true);
+                var remaining = routing.Missing(IncomingMode, OutgoingMode, activate: true);
                 if (remaining == missing) break; // The installer may require a reboot.
                 missing = remaining;
             }
-            Status.Text = routing.Missing(NeedsSecondCable, true) == null ? "Devices ready. Return to the bridge and switch it on." :
+            Status.Text = routing.Missing(IncomingMode, OutgoingMode, true) == null ? "Devices ready. Return to the bridge and switch it on." :
                 "Finish the driver installation and restart Windows if requested. Then check the devices again.";
         }
         catch (Exception ex) { Status.Text = ex.Message; }
@@ -257,7 +261,7 @@ public partial class MainWindow : Window
     void VoiceChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ready) return;
-        try { Local.Save("voice", (string)Voice.SelectedItem); }
+        try { var box = (ComboBox)sender; Local.Save(box == Voice ? "voice" : "outgoingVoice", (string)box.SelectedItem); }
         catch (Exception ex) { Status.Text = "Could not save the voice preference. " + ex.Message; }
     }
 
@@ -269,17 +273,23 @@ public partial class MainWindow : Window
             {
                 busy = true;
                 UpdateControls();
-                if (routing.Missing(NeedsSecondCable) is string missing)
+                if (IncomingMode == Routing.Original && !Routing.Translates(OutgoingMode))
+                {
+                    Status.Text = "Original audio is already active in both directions.";
+                    return;
+                }
+                if (routing.Missing(IncomingMode, OutgoingMode) is string missing)
                 {
                     if (!Settings.IsVisible) SettingsClick(this, e);
+                    DeviceTab.IsSelected = true;
                     Status.Text = $"{missing} needs setup. Select Install or enable devices to continue.";
                     return;
                 }
                 if (!await CheckSession()) return;
                 string incoming = (string)Incoming.SelectedItem, outgoing = (string)Outgoing.SelectedItem;
-                if ((incoming != "Pass through" || outgoing != "Pass through") && !HasSpeechKey)
+                if ((Routing.Translates(incoming) || Routing.Translates(outgoing)) && !HasSpeechKey)
                     throw new InvalidOperationException("Enter your audio API key in Codex Settings to translate.");
-                routing.Enable(incoming, outgoing, (string)Voice.SelectedItem, SpeechKey, http, error => Dispatcher.InvokeAsync(() =>
+                routing.Enable(incoming, outgoing, (string)Voice.SelectedItem, (string)SendVoice.SelectedItem, SpeechKey, http, error => Dispatcher.InvokeAsync(() =>
                 {
                     try { routing.Restore(); Status.Text = error; }
                     catch (Exception ex) { Status.Text = ex.Message; }

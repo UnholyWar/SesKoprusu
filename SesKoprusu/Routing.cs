@@ -31,9 +31,16 @@ internal sealed class Routing
     MMDevice Cable(DataFlow flow, string name) => FindCable(flow, name, DeviceState.Active)
         ?? throw new InvalidOperationException($"{name} is unavailable. Open Codex Settings to repair the audio devices.");
 
-    public string? Missing(bool outgoing, bool activate = false)
+    public const string Original = "Keep original";
+    public const string Monitor = "Pass through";
+    public static bool Translates(string direction) => direction != Original && direction != Monitor;
+
+    public string? Missing(string incoming, string outgoing, bool activate = false)
     {
-        foreach (var prefix in outgoing ? new[] { "CABLE", "CABLE-A" } : new[] { "CABLE" })
+        var required = new List<string>();
+        if (incoming != Original) required.Add("CABLE");
+        if (Translates(outgoing)) required.Add("CABLE-A");
+        foreach (var prefix in required)
         foreach (var flow in new[] { DataFlow.Render, DataFlow.Capture })
         {
             var name = prefix + (flow == DataFlow.Render ? " Input" : " Output");
@@ -62,44 +69,51 @@ internal sealed class Routing
         return device;
     }
 
-    public void Enable(string incoming, string outgoing, string voice, string key, System.Net.Http.HttpClient http, Action<string> failed)
+    public void Enable(string incoming, string outgoing, string incomingVoice, string outgoingVoice, string key, System.Net.Http.HttpClient http, Action<string> failed)
     {
         if (Pending) throw new InvalidOperationException("Restore the previous devices first.");
-        using var output = Cable(DataFlow.Render, "CABLE Input");
-        var input = Hold(Cable(DataFlow.Capture, "CABLE Output"));
-        var saved = (from flow in new[] { DataFlow.Render, DataFlow.Capture }
-                     from role in Roles select new Endpoint(flow, role, DefaultId(flow, role))).ToArray();
-        var speakers = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Render && e.Role == Role.Multimedia).Id));
-        if (speakers.ID == output.ID) throw new InvalidOperationException("Select your physical speakers as the default output first.");
+        var flows = new List<DataFlow>();
+        if (incoming != Original) flows.Add(DataFlow.Render);
+        if (Translates(outgoing) || (incoming == Monitor && outgoing == Monitor)) flows.Add(DataFlow.Capture);
+        if (flows.Count == 0) throw new InvalidOperationException("Both directions use the original audio. No routing is needed.");
+        var saved = (from flow in flows from role in Roles select new Endpoint(flow, role, DefaultId(flow, role))).ToArray();
         Local.Save("routing", saved);
         try
         {
-            var recordingId = input.ID;
-            if (outgoing != "Pass through")
+            string? renderId = null, recordingId = null;
+            if (Translates(outgoing))
             {
                 var send = Hold(Cable(DataFlow.Render, "CABLE-A Input"));
                 var virtualMic = Hold(Cable(DataFlow.Capture, "CABLE-A Output"));
                 var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Communications).Id));
-                if (mic.ID == virtualMic.ID || mic.ID == input.ID) throw new InvalidOperationException("Select your physical microphone first.");
-                translations.Add(new AudioTranslation(mic, send, outgoing, voice, key, http, failed));
+                if (mic.ID == virtualMic.ID || mic.FriendlyName.StartsWith("CABLE Output", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Select your physical microphone first.");
+                translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, key, http, failed));
                 recordingId = virtualMic.ID;
             }
-            if (incoming != "Pass through")
-                translations.Add(new AudioTranslation(input, speakers, incoming, voice, key, http, failed));
-            else
+            if (incoming != Original)
             {
-                capture = new WasapiCapture(input);
-                var buffer = new BufferedWaveProvider(capture.WaveFormat) { DiscardOnBufferOverflow = true };
-                capture.DataAvailable += (_, e) => buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-                monitor = new WasapiOut(speakers, AudioClientShareMode.Shared, false, 80);
-                monitor.Init(buffer);
-                monitor.Play();
-                capture.StartRecording();
+                using var output = Cable(DataFlow.Render, "CABLE Input");
+                renderId = output.ID;
+                var input = Hold(Cable(DataFlow.Capture, "CABLE Output"));
+                var speakers = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Render && e.Role == Role.Multimedia).Id));
+                if (speakers.ID == renderId) throw new InvalidOperationException("Select your physical speakers as the default output first.");
+                if (incoming == Monitor && outgoing == Monitor) recordingId = input.ID;
+                if (Translates(incoming))
+                    translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, key, http, failed));
+                else
+                {
+                    capture = new WasapiCapture(input);
+                    var buffer = new BufferedWaveProvider(capture.WaveFormat) { DiscardOnBufferOverflow = true };
+                    capture.DataAvailable += (_, e) => buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                    monitor = new WasapiOut(speakers, AudioClientShareMode.Shared, false, 80);
+                    monitor.Init(buffer);
+                    monitor.Play();
+                    capture.StartRecording();
+                }
             }
             foreach (var e in saved)
             {
-                if (e.Flow == DataFlow.Capture && incoming != "Pass through" && outgoing == "Pass through") continue;
-                Set(e, e.Flow == DataFlow.Render ? output.ID : recordingId);
+                Set(e, e.Flow == DataFlow.Render ? renderId! : recordingId!);
             }
         }
         catch { Restore(); throw; }

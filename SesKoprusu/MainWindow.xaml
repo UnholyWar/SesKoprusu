@@ -1,7 +1,21 @@
-<Window x:Class="SesKoprusu.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SesKöprüsü" Width="410" MinWidth="370" SizeToContent="Height" MaxHeight="720" FontFamily="Segoe UI" FontSize="14" Foreground="#F3EAFF" Closing="OnClosing">
+<Window x:Class="SesKoprusu.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="SesKöprüsü" Width="440" MinWidth="370" SizeToContent="Height" MaxHeight="720" FontFamily="Segoe UI" FontSize="14" Foreground="#F3EAFF" Closing="OnClosing">
  <Window.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#090711"/><GradientStop Color="#2E1945" Offset=".68"/><GradientStop Color="#100D1C" Offset="1"/></LinearGradientBrush></Window.Background>
  <Window.Resources>
   <Style TargetType="Button"><Setter Property="Padding" Value="10,5"/><Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#48305F"/><Setter Property="BorderBrush" Value="#80629F"/><Setter Property="Margin" Value="0,2,5,2"/></Style>
+  <Style TargetType="TabItem">
+   <Setter Property="Foreground" Value="#C8BCD7"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+    <Border x:Name="TabSurface" CornerRadius="6" Background="Transparent" Padding="13,7" Margin="0,0,4,6">
+     <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="#33273E"/></Trigger>
+     <Trigger Property="IsSelected" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="#503563"/><Setter Property="Foreground" Value="White"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="TabSurface" Property="BorderBrush" Value="#CDA4F4"/><Setter TargetName="TabSurface" Property="BorderThickness" Value="1"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="SectionTitle" TargetType="TextBlock"><Setter Property="FontSize" Value="18"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
   <Style TargetType="ComboBox"><Setter Property="Padding" Value="6,3"/><Setter Property="MinWidth" Value="135"/></Style>
  </Window.Resources>
  <Grid>
@@ -17,23 +31,36 @@
     <DockPanel Margin="0,2"><ComboBox DockPanel.Dock="Right" x:Name="Outgoing" SelectionChanged="LanguageChanged" AutomationProperties.Name="Outgoing audio language"/><TextBlock Text="Outgoing audio language" VerticalAlignment="Center"/></DockPanel>
    </StackPanel>
    <StackPanel x:Name="Settings" Visibility="Collapsed">
-    <TextBlock Text="Audio devices" FontWeight="SemiBold"/>
-    <TextBlock x:Name="DriverState" TextWrapping="Wrap" Margin="0,3"/>
-    <WrapPanel><Button x:Name="Repair" Content="Install or enable devices" Click="RepairClick"/><Button Content="Get Cable A+B ↗" Click="LicenseClick"/></WrapPanel>
-    <TextBlock Text="Windows requires administrator approval to register the audio driver." TextWrapping="Wrap" Margin="0,3,0,10"/>
-    <TextBlock Text="ChatGPT account" FontWeight="SemiBold"/>
+    <TabControl Background="#181321" BorderBrush="#503C61" BorderThickness="1" Padding="16" Foreground="#F3EAFF">
+     <TabItem Header="Account"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
+    <TextBlock Text="ChatGPT account" Style="{StaticResource SectionTitle}"/>
     <WrapPanel><Button x:Name="Login" Content="Sign in with a device code" Click="LoginClick"/><Button x:Name="Test" Content="Refresh status" Click="TestClick"/></WrapPanel>
     <WrapPanel><Button x:Name="Reconnect" Content="Reconnect to App Server" Click="ReconnectClick"/><Button Content="Account security ↗" Click="SecurityClick"/></WrapPanel>
     <StackPanel x:Name="Challenge" Visibility="Collapsed" Margin="0,6">
      <TextBlock Text="Enter this code on the ChatGPT verification page."/>
      <TextBox x:Name="UserCode" IsReadOnly="True" FontSize="22" Padding="6" FontFamily="Consolas" AutomationProperties.Name="One-time device code"/>
+    <TextBlock Text="Use this code only for your own sign-in. Never share it." TextWrapping="Wrap" Margin="0,4,0,10"/>
      <Button Content="Open verification page ↗" Click="VerificationClick"/>
     </StackPanel>
     <Button x:Name="CancelLogin" Content="Cancel" HorizontalAlignment="Left" Visibility="Collapsed" Click="CancelClick"/>
-    <TextBlock Text="Use this code only for your own sign-in. Never share it." TextWrapping="Wrap" Margin="0,4,0,10"/>
+
+     </StackPanel></TabItem>
+     <TabItem x:Name="DeviceTab" Header="Devices"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
+    <TextBlock Text="Audio devices" Style="{StaticResource SectionTitle}"/>
+    <TextBlock x:Name="DriverState" TextWrapping="Wrap" Margin="0,3"/>
+    <WrapPanel><Button x:Name="Repair" Content="Install or enable devices" Click="RepairClick"/><Button Content="Get Cable A+B ↗" Click="LicenseClick"/></WrapPanel>
+    <TextBlock Text="Windows requires administrator approval to register the audio driver." TextWrapping="Wrap" Margin="0,3,0,10"/>
+     </StackPanel></TabItem>
+     <TabItem Header="Voice"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
+    <TextBlock Text="Speech and translation" Style="{StaticResource SectionTitle}"/>
     <TextBlock Text="OpenAI audio API key"/><PasswordBox x:Name="Key" PasswordChanged="KeyChanged" Padding="6" ToolTip="Used for this session"/>
     <TextBlock x:Name="SpeechState" Foreground="#D2B4EF" TextWrapping="Wrap" Margin="0,3,0,8"/>
+    <TextBlock Text="Incoming translation voice" Margin="0,8,0,4"/>
     <DockPanel><Button x:Name="Preview" DockPanel.Dock="Right" Content="Play sample" Click="PreviewClick"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Speaking voice"/></DockPanel>
+    <TextBlock Text="Outgoing translation voice" Margin="0,12,0,4"/>
+    <ComboBox x:Name="SendVoice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Outgoing translation voice"/>
+     </StackPanel></TabItem>
+    </TabControl>
    </StackPanel>
    <ProgressBar x:Name="Transfer" Visibility="Collapsed" Height="6" Margin="0,8,0,0" Foreground="#BD8EFF"/>
    <TextBlock x:Name="Status" TextWrapping="Wrap" Foreground="#E4CFF7" Margin="0,6,0,0"/>
