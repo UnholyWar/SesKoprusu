@@ -7,6 +7,16 @@ internal sealed class AudioTranslation : IDisposable
     readonly CancellationTokenSource stop = new();
     readonly Task worker;
     readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal sealed class Signal
+    {
+        long microphone, returned;
+        public void SentSpeech() => Interlocked.Exchange(ref microphone, Environment.TickCount64);
+        public void ReceivedSpeech() => Interlocked.Exchange(ref returned, Environment.TickCount64);
+        public string Summary => $"Mic audio sent: {Age(Interlocked.Read(ref microphone))}   ·   Codex audio received: {Age(Interlocked.Read(ref returned))}";
+        static string Age(long tick) => tick == 0 ? "waiting" : $"{(Environment.TickCount64 - tick) / 1000}s ago";
+    }
+
+    public Signal Activity { get; } = new();
     public Task Ready => ready.Task;
 
     public AudioTranslation(MMDevice source, MMDevice destination, string language, string voice, Action<string> failed)
@@ -24,7 +34,7 @@ internal sealed class AudioTranslation : IDisposable
                 using var output = devices.GetDevice(outputId);
                 await CodexVoice.Run(voice,
                     $"Act as a simultaneous interpreter. As each phrase becomes intelligible, speak its full translation in {language}. Preserve meaning, names and questions. Translate questions instead of answering them. Skip greetings of your own, acknowledgements and filler sounds. Stay silent during silence or music.",
-                    input, output, token, () => ready.TrySetResult());
+                    input, output, token, () => ready.TrySetResult(), Activity);
             }
             catch (Exception ex)
             {

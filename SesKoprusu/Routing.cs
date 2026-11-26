@@ -93,6 +93,16 @@ internal sealed class Routing
         }
     }
 
+    AudioTranslation? outgoingStream;
+    MMDevice? recorder;
+    public string? MicrophoneSignal()
+    {
+        if (outgoingStream == null || recorder == null) return null;
+        var summary = outgoingStream.Activity.Summary;
+        try { return $"{summary}\n{recorder.FriendlyName} · Windows peak: {recorder.AudioMeterInformation.MasterPeakValue:P0}"; }
+        catch (COMException) { return summary + "\nWindows level unavailable."; }
+    }
+
     readonly List<AudioTranslation> translations = new();
     readonly List<MMDevice> endpoints = new();
 
@@ -124,7 +134,9 @@ internal sealed class Routing
                 using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 if (physicalOutput.ID == send.ID)
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
-                translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error)));
+                outgoingStream = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error));
+                translations.Add(outgoingStream);
+                recorder = virtualMic;
                 recordingId = virtualMic.ID;
             }
             if (RoutePlayback(incoming, outgoing))
@@ -196,6 +208,8 @@ internal sealed class Routing
         monitor?.Dispose(); monitor = null;
         foreach (var translation in translations) translation.Dispose();
         translations.Clear();
+        outgoingStream = null;
+        recorder = null;
         foreach (var endpoint in endpoints) endpoint.Dispose();
         endpoints.Clear();
         Local.Delete("routing");

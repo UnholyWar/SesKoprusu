@@ -163,6 +163,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        signalTimer.Tick += (_, _) => RefreshSignal();
+        MicPath.IsVisibleChanged += (_, _) =>
+        {
+            if (MicPath.IsVisible) { RefreshSignal(); signalTimer.Start(); }
+            else signalTimer.Stop();
+        };
         UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)} · Test channel";
         try { ownsInstance = instance.WaitOne(0); }
         catch (AbandonedMutexException) { ownsInstance = true; }
@@ -218,6 +224,15 @@ public partial class MainWindow : Window
     string MicSetupCable => Routing.Translates(OutgoingMode) ? Routing.MicrophoneCable(IncomingMode) : Routing.MicrophoneCable(Routing.Original);
 
     void SoundSettingsClick(object sender, RoutedEventArgs e) => OpenPage("ms-settings:sound");
+
+    readonly System.Windows.Threading.DispatcherTimer signalTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+
+    void RefreshSignal()
+    {
+        var reading = routing.MicrophoneSignal();
+        MicSignal.Visibility = reading == null ? Visibility.Collapsed : Visibility.Visible;
+        MicSignal.Text = reading ?? "";
+    }
 
     void RefreshDrivers()
     {

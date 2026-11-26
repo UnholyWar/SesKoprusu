@@ -18,7 +18,7 @@ internal static class CodexVoice
         return [Default, .. catalog.GetProperty("voices").GetProperty("v3").EnumerateArray().Select(x => x.GetString()!)];
     }
 
-    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token, Action? captureReady = null)
+    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token, Action? captureReady = null, AudioTranslation.Signal? activity = null)
     {
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
         startup.CancelAfter(TimeSpan.FromSeconds(45));
@@ -55,7 +55,11 @@ internal static class CodexVoice
                 audible |= Math.Abs((int)sample) > 128;
             }
             buffer.AddSamples(pcm, 0, pcm.Length);
-            if (audible) Interlocked.Exchange(ref lastSpeech, Environment.TickCount64);
+            if (audible)
+            {
+                Interlocked.Exchange(ref lastSpeech, Environment.TickCount64);
+                activity?.ReceivedSpeech();
+            }
         };
         await peer.createDataChannel("oai-events").WaitAsync(startup.Token);
         var offer = peer.createOffer(null);
@@ -109,9 +113,15 @@ internal static class CodexVoice
                 {
                     int count = Math.Min(160, (e.BytesRecorded - offset) / 2);
                     var payload = new byte[count];
+                    bool audible = false;
                     for (int i = 0; i < count; i++, offset += 2)
-                        payload[i] = MuLawEncoder.LinearToMuLawSample(BitConverter.ToInt16(e.Buffer, offset));
+                    {
+                        var sample = BitConverter.ToInt16(e.Buffer, offset);
+                        audible |= Math.Abs((int)sample) > 128;
+                        payload[i] = MuLawEncoder.LinearToMuLawSample(sample);
+                    }
                     peer.SendAudio((uint)count, payload);
+                    if (audible) activity?.SentSpeech();
                 }
             };
             capture.RecordingStopped += (_, e) => ended.TrySetException(e.Exception ?? new IOException("Audio capture stopped."));

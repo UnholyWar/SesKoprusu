@@ -61,6 +61,7 @@
     <TextBlock Text="Audio devices" Style="{StaticResource SectionTitle}"/>
     <TextBlock Text="Microphone translation" FontWeight="SemiBold" Margin="0,2,0,4"/>
     <TextBlock x:Name="MicPath" TextWrapping="Wrap"/>
+    <TextBlock x:Name="MicSignal" Visibility="Collapsed" Foreground="#D2B4EF" Margin="0,6,0,0" TextWrapping="Wrap"/>
     <WrapPanel Margin="0,5,0,8"><Button x:Name="MicSetup" Style="{StaticResource Primary}" Click="RepairClick" Visibility="Collapsed"/><Button Content="Windows sound settings ↗" Click="SoundSettingsClick"/></WrapPanel>
     <Separator Margin="0,4,0,8"/>
     <TextBlock x:Name="DriverState" TextWrapping="Wrap" Margin="0,3"/>
