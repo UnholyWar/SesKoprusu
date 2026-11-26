@@ -23,3 +23,9 @@ setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sü
 Oturum kalıcılığını sınamak için ilk başarılı girişten sonra uygulamayı kapatıp aynı Windows kullanıcısıyla yeniden açın. Kayıtlı ChatGPT oturumu otomatik okunmalı ve yeni kod gösterilmemelidir. Bağlantı kesilirse ağı geri getirip Durumu yenile düğmesini kullanın.
 
 Codex Settings → Audio devices bölümündeki Install or enable devices seçeneği, devre dışı uçları etkinleştirir. Temel sürücü yoksa paketlenmiş kurucuyu veya VB-Audio’nun resmî indirmesini kullanır. Giden ses için ayrıca üreticiden edinilen A+B zip dosyasını seçin. İndirmeler ve çalışma dosyaları %LOCALAPPDATA%\SesKoprusu altında tutulur. Paketle gelen araçlar uygulama klasöründen kullanılır. Windows sürücü kaydı yönetici onayı ve bazen yeniden başlatma gerektirir.
+
+## Test kanalından güncelleme
+
+GitHub Actions, test/ses-koprusu dalına gelen push sonrasında Windows x64 setup üretir. Başarılı derlemeler GitHub Releases altında setup-test-v1.0.N etiketiyle ön sürüm olarak yayımlanır. İlk kurulumda SesKoprusu-Setup.exe çalıştırılır. Sonraki sürümler Codex Settings → Updates → Check for updates üzerinden kurulabilir. Uygulama tam kurulum paketini indirir, SHA-256 doğrulaması yapar ve kurucuyu açar. Kullanıcı ayarları ve oturum uygulamanın LocalAppData klasöründe kalır.
+
+Otomatik pakette VB-CABLE yeniden dağıtılmaz. Kurulu sürücüler kullanılmaya devam eder, eksikler Devices bölümünden kurulur. Workflow için depoda Actions ve Releases yazma yetkisi gerekir. Uygulama güncelleme kanalını kimlik doğrulamasız okuduğu için release dosyaları kullanıcıya açık olmalıdır.

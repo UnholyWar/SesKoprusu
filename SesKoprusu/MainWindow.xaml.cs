@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     void UpdateControls()
     {
         ImportPackage.IsEnabled = Repair.IsEnabled = DeviceRefresh.IsEnabled = ready && !busy && !routing.Pending;
+        UpdateButton.IsEnabled = ready && !busy && !routing.Pending;
         Login.Content = signedIn ? "Sign in again" : "Sign in with a device code";
         Login.IsEnabled = ready && !busy && !routing.Pending;
         Reconnect.IsEnabled = ready && !busy;
@@ -162,6 +163,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)} · Test channel";
         try { ownsInstance = instance.WaitOne(0); }
         catch (AbandonedMutexException) { ownsInstance = true; }
         if (!ownsInstance) { MessageBox.Show("SesKöprüsü is already running."); Loaded += (_, _) => Close(); return; }
@@ -339,6 +341,33 @@ public partial class MainWindow : Window
 
     async void PreviewClick(object sender, RoutedEventArgs e) =>
         await RunAudio(() => CodexVoice.Preview((string)Voice.SelectedItem, lifetime.Token));
+
+    SetupUpdate? availableUpdate;
+
+    async void UpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (busy || routing.Pending) return;
+        busy = true;
+        UpdateControls();
+        try
+        {
+            if (availableUpdate == null)
+            {
+                UpdateState.Text = "Checking for a new Windows setup…";
+                availableUpdate = await SetupUpdates.Check(http, lifetime.Token);
+                UpdateState.Text = availableUpdate == null ? $"Up to date · {SetupUpdates.Current.ToString(3)}" :
+                    $"Version {availableUpdate.Version} is available. Save your work before installing.";
+                if (availableUpdate != null) UpdateButton.Content = "Download and install";
+                return;
+            }
+            var file = await SetupUpdates.Download(http, availableUpdate, p => Progress("Downloading update…", p), lifetime.Token);
+            using var installer = Process.Start(new ProcessStartInfo(file) { UseShellExecute = true, Verb = "runas" });
+            if (installer == null) throw new InvalidOperationException("Setup could not start.");
+            Close();
+        }
+        catch (Exception ex) { UpdateState.Text = "Update failed. " + ex.Message; }
+        finally { Transfer.Visibility = Visibility.Collapsed; busy = false; UpdateControls(); }
+    }
 
     void OnClosing(object? sender, CancelEventArgs e)
     {

@@ -73,6 +73,11 @@
     <Button Style="{StaticResource Primary}" x:Name="Preview" HorizontalAlignment="Left" Margin="0,14,0,0" Content="Preview incoming voice" Click="PreviewClick"/>
 
      </StackPanel></TabItem>
+     <TabItem Header="Updates"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
+      <TextBlock Text="Application updates" Style="{StaticResource SectionTitle}"/>
+      <TextBlock x:Name="UpdateState" TextWrapping="Wrap" Margin="0,0,0,10"/>
+      <Button x:Name="UpdateButton" HorizontalAlignment="Left" Content="Check for updates" Click="UpdateClick"/>
+     </StackPanel></TabItem>
     </TabControl>
    </StackPanel>
    <ProgressBar x:Name="Transfer" Visibility="Collapsed" Height="6" Margin="0,8,0,0" Foreground="#BD8EFF"/>
