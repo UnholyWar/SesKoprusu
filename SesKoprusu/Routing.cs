@@ -62,7 +62,8 @@ internal sealed class Routing
         public bool Ready => Playback == DeviceState.Active && Recording == DeviceState.Active && FormatIssue == null;
         public bool CanEnable => Playback == DeviceState.Disabled || Recording == DeviceState.Disabled;
         public bool NeedsInstall => !Installed && !Ready;
-        public string Description => $"{Name} · {(Required ? "Required" : "Optional")}\nDriver: {(Installed ? "Installed" : "Not detected")}   ·   Package: {(DriverSetup.HasPackage(Name) ? "Available locally" : "Not cached")}\nPlayback: {Describe(Playback)}   ·   Recording: {Describe(Recording)}";
+        public string Requirement => Required ? "Required" : "Optional";
+        public string Description => $"Driver: {(Installed ? "Installed" : "Not detected")}   ·   Package: {(DriverSetup.HasPackage(Name) ? "Available locally" : "Not cached")}\nPlayback: {Describe(Playback)}   ·   Recording: {Describe(Recording)}";
 
         static string Describe(DeviceState? state) => state switch
         {

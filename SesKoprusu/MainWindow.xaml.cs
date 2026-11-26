@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 
 namespace SesKoprusu;
 
@@ -34,8 +36,14 @@ public partial class MainWindow : Window
         Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
         Preview.IsEnabled = PreviewSend.IsEnabled = ready && !busy && connected && !routing.Pending;
         Voice.IsEnabled = SendVoice.IsEnabled = Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
-        Route.IsEnabled = ready && !busy && (routing.Pending || connected);
-
+        bool active = routing.Pending;
+        Route.IsEnabled = ready && !busy && (active || connected);
+        BridgeState.Text = active ? "Bridge on" : "Bridge off";
+        BridgeHint.Text = active ? "Turn off the bridge to change languages or restore your devices."
+            : busy ? "Please wait while the current operation finishes."
+            : connected ? "Choose the languages below, then turn on the bridge."
+            : signedIn ? "Open Account in Codex Settings to reconnect."
+            : "Open Codex Settings to connect your account.";
     }
 
     async Task<bool> CheckSession()
@@ -44,7 +52,7 @@ public partial class MainWindow : Window
         try
         {
             cliFound = CodexSession.FindCli() != null;
-            if (!cliFound) { signedIn = false; SessionState.Text = "Codex will be installed at first sign-in"; return false; }
+            if (!cliFound) { signedIn = false; SessionState.Text = "Codex will be installed when you sign in."; return false; }
             using var accountTimeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             accountTimeout.CancelAfter(TimeSpan.FromSeconds(15));
             signedIn = await CodexSession.SignedIn(accountTimeout.Token);
@@ -55,20 +63,20 @@ public partial class MainWindow : Window
             using var server = await AccountServer.Connect(timeout.Token);
             await server.Call("account/rateLimits/read", new { }, timeout.Token);
             connected = true;
-            SessionState.Text = "●  Codex connected";
+            SessionState.Text = "Codex connected";
             if (!catalogLoaded)
             {
                 try
                 {
                     var voices = await CodexVoice.Choices(timeout.Token);
                     LoadVoices(voices);
-                    SpeechState.Text = "Voices from your Codex session.";
+                    SpeechState.Text = "Choose a voice for each direction. Codex default uses your session’s voice.";
                     catalogLoaded = true;
                 }
                 catch (Exception) { SpeechState.Text = "Voice list unavailable. Preview to check Codex realtime access."; }
             }
         }
-        catch (Exception ex) { SessionState.Text = signedIn ? "Session saved · Retry connection" : "○  Account status unavailable"; Status.Text = ex is OperationCanceledException ? "The connection test timed out." : ex.Message; }
+        catch (Exception ex) { SessionState.Text = signedIn ? "Session saved · Retry connection" : "Account status unavailable"; Status.Text = ex is OperationCanceledException ? "The connection test timed out." : ex.Message; }
         finally { UpdateControls(); }
         return connected;
     }
@@ -87,6 +95,11 @@ public partial class MainWindow : Window
             catch (Exception) { if (loginAttempt != null) Status.Text = "Could not read account status."; }
             return;
         }
+        await RefreshSession();
+    }
+
+    async Task RefreshSession()
+    {
         busy = true;
         UpdateControls();
         try { await CheckSession(); }
@@ -164,6 +177,31 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+    }
+
+    void MinimizeClick(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+
+    void MaximizeClick(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
+        else SystemCommands.MaximizeWindow(this);
+    }
+
+    void CloseClick(object sender, RoutedEventArgs e) => Close();
+
+    async void FirstRender(object? sender, EventArgs e)
+    {
+        ContentRendered -= FirstRender;
+        await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
+        if (!IsLoaded) return;
+        try { ownsInstance = instance.WaitOne(0); }
+        catch (AbandonedMutexException) { ownsInstance = true; }
+        if (!ownsInstance)
+        {
+            MessageBox.Show(this, "SesKöprüsü is already running.", Title);
+            Close();
+            return;
+        }
         signalTimer.Tick += (_, _) => RefreshSignal();
         MicPath.IsVisibleChanged += (_, _) =>
         {
@@ -171,9 +209,6 @@ public partial class MainWindow : Window
             else signalTimer.Stop();
         };
         UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)} · Test channel";
-        try { ownsInstance = instance.WaitOne(0); }
-        catch (AbandonedMutexException) { ownsInstance = true; }
-        if (!ownsInstance) { MessageBox.Show("SesKöprüsü is already running."); Loaded += (_, _) => Close(); return; }
         Incoming.ItemsSource = Outgoing.ItemsSource = Languages;
         Incoming.SelectedIndex = Outgoing.SelectedIndex = 0;
         try
@@ -193,7 +228,16 @@ public partial class MainWindow : Window
         Route.IsChecked = routing.Pending;
         ready = true;
         UpdateControls();
-        Loaded += (_, e) => TestClick(this, e);
+        Workspace.Visibility = Visibility.Visible;
+        LaunchScreen.IsHitTestVisible = false;
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var reveal = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(350));
+            reveal.Completed += (_, _) => LaunchScreen.Visibility = Visibility.Collapsed;
+            LaunchScreen.BeginAnimation(OpacityProperty, reveal);
+        }
+        else LaunchScreen.Visibility = Visibility.Collapsed;
+        await RefreshSession();
     }
 
     void SettingsClick(object sender, RoutedEventArgs e)
@@ -208,7 +252,9 @@ public partial class MainWindow : Window
                 ? $"Recording input: {Routing.MicrophoneCable(IncomingMode)} Output. Turn on the bridge before opening Windows Sound Recorder."
                 : "To record your translated microphone, choose an outgoing language on the home screen.";
         }
-        Nav.Content = open ? "Back" : "Codex Settings";
+        Nav.Content = open ? "Back to bridge" : "Codex Settings";
+        PageTitle.Text = open ? "Codex settings" : "Audio bridge";
+        PageScroll.ScrollToTop();
     }
 
     void Progress(string label, double? value)
@@ -246,7 +292,7 @@ public partial class MainWindow : Window
              microphone.Installed ? "Driver installed. Check endpoint visibility in Windows Sound." : "Virtual microphone driver required.");
         MicSetup.Content = microphone.CanEnable ? "Enable microphone devices" : $"Set up microphone driver ({microphone.Name})";
         MicSetup.Visibility = microphone.CanEnable || microphone.NeedsInstall ? Visibility.Visible : Visibility.Collapsed;
-        DriverState.Text = string.Join("\n\n", inventory.Select(d => d.Description));
+        DriverState.ItemsSource = inventory;
         var unavailable = inventory.FirstOrDefault(d => d.Required && !d.Ready);
         Repair.Visibility = unavailable != microphone && (unavailable is { CanEnable: true } or { NeedsInstall: true }) ? Visibility.Visible : Visibility.Collapsed;
         ImportPackage.Visibility = unavailable is { NeedsInstall: true } ? Visibility.Visible : Visibility.Collapsed;
@@ -294,7 +340,7 @@ public partial class MainWindow : Window
 
     void TryRefreshDrivers()
     {
-        try { RefreshDrivers(); } catch (Exception ex) { DriverState.Text = "Device inventory unavailable."; DeviceHint.Text = ex.Message; MicPath.Text = "Microphone status unavailable."; MicSetup.Visibility = ImportPackage.Visibility = Repair.Visibility = Visibility.Collapsed; }
+        try { RefreshDrivers(); } catch (Exception ex) { DriverState.ItemsSource = null; DeviceHint.Text = ex.Message; MicPath.Text = "Microphone status unavailable."; MicSetup.Visibility = ImportPackage.Visibility = Repair.Visibility = Visibility.Collapsed; }
     }
 
     void LanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -368,12 +414,12 @@ public partial class MainWindow : Window
         finally { busy = false; Route.IsChecked = routing.Pending; UpdateControls(); }
     }
 
-    async Task RunAudio(Func<Task> action)
+    async Task RunAudio(Func<Task> action, string direction)
     {
         busy = true;
         UpdateControls();
-        Status.Text = "Working…";
-        try { if (!await CheckSession()) { Status.Text = "Sign in through Codex Settings to continue."; return; } await action(); Status.Text = "Done."; }
+        Status.Text = $"Preparing {direction} voice preview…";
+        try { if (!await CheckSession()) { Status.Text = "Sign in through Codex Settings to continue."; return; } await action(); Status.Text = "Voice preview finished."; }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { busy = false; UpdateControls(); }
     }
@@ -383,7 +429,7 @@ public partial class MainWindow : Window
         bool outgoing = sender == PreviewSend;
         var voice = (string)(outgoing ? SendVoice : Voice).SelectedItem;
         var target = outgoing ? OutgoingMode : IncomingMode;
-        await RunAudio(() => CodexVoice.Preview(voice, Routing.Translates(target) ? target : "Turkish", lifetime.Token));
+        await RunAudio(() => CodexVoice.Preview(voice, Routing.Translates(target) ? target : "Turkish", lifetime.Token), outgoing ? "outgoing" : "incoming");
     }
 
     SetupUpdate? availableUpdate;
@@ -418,6 +464,7 @@ public partial class MainWindow : Window
         if (!ownsInstance) return;
         try { routing.Restore(); }
         catch (Exception ex) { Status.Text = ex.Message; e.Cancel = true; return; }
+        signalTimer.Stop();
         lifetime.Cancel();
         instance.ReleaseMutex();
         instance.Dispose();

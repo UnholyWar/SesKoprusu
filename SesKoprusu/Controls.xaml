@@ -78,4 +78,101 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <SolidColorBrush x:Key="PageBrush" Color="#121118"/>
+    <SolidColorBrush x:Key="CardBrush" Color="#201D29"/>
+    <SolidColorBrush x:Key="EdgeBrush" Color="#3C3549"/>
+    <SolidColorBrush x:Key="MutedBrush" Color="#C4BCCE"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="#D2B9FF"/>
+    <FontFamily x:Key="InterfaceFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+    <FontFamily x:Key="DisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
+
+    <!-- Trim the transparent padding for display while keeping the supplied PNG intact. -->
+    <BitmapImage x:Key="BrandArtwork" UriSource="pack://application:,,,/Assets/SesKoprusuLogo.png"
+                 SourceRect="17,242,1208,752"/>
+    <DataTemplate x:Key="Brand">
+        <Image Source="{StaticResource BrandArtwork}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+               AutomationProperties.Name="SesKöprüsü"/>
+    </DataTemplate>
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource EdgeBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="18,15"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+    <Style x:Key="Heading" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontSize" Value="18"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="Hint" TargetType="TextBlock">
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+        <Setter Property="Margin" Value="0,4,0,10"/>
+    </Style>
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Margin" Value="0,4,0,5"/>
+    </Style>
+    <Style x:Key="CaptionButton" TargetType="Button">
+        <Setter Property="Width" Value="44"/>
+        <Setter Property="Height" Value="36"/>
+        <Setter Property="Foreground" Value="#E6E0EF"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="HitArea" Background="{TemplateBinding Background}" CornerRadius="5" BorderThickness="1" BorderBrush="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HitArea" Property="Background" Value="#45394F"/></Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions><Condition Property="Tag" Value="Close"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions>
+                            <Setter TargetName="HitArea" Property="Background" Value="#B53251"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="HitArea" Property="BorderBrush" Value="#D2B9FF"/></Trigger>
+                        <Trigger Property="IsPressed" Value="True"><Setter TargetName="HitArea" Property="Opacity" Value=".75"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="TabItem">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="TabItem">
+                <Border x:Name="Tab" CornerRadius="7" BorderBrush="Transparent" BorderThickness="1" Background="Transparent" Padding="{TemplateBinding Padding}" Margin="0,0,3,4">
+                    <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Tab" Property="Background" Value="#302B3B"/></Trigger>
+                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="Tab" Property="Background" Value="#3B2E4E"/><Setter Property="Foreground" Value="#F0E0FF"/></Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Tab" Property="BorderBrush" Value="#CDA4F4"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
+    <Style x:Key="BridgeSwitch" TargetType="ToggleButton">
+        <Setter Property="Width" Value="52"/><Setter Property="Height" Value="30"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="ToggleButton">
+                <Border x:Name="Track" Background="#554B61" BorderThickness="1" BorderBrush="#897995" CornerRadius="15" Padding="3">
+                    <Ellipse x:Name="Thumb" Width="22" Fill="#FBF6FF" HorizontalAlignment="Left"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="#915BC8"/><Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Track" Property="BorderBrush" Value="#DAC6F7"/></Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Track" Property="BorderBrush" Value="White"/></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Track" Property="Opacity" Value=".48"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
 </ResourceDictionary>

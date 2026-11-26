@@ -8,6 +8,8 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputBaseFilename=SesKoprusu-Setup
+SetupIconFile=..\SesKoprusu\Assets\SesKoprusu.ico
+UninstallDisplayIcon={app}\SesKoprusu.exe
 [Files]
 Source: "publish\*"; DestDir: "{app}"; Flags: recursesubdirs
 #if GetEnv("SESKOPRUSU_DRIVER") != ""
