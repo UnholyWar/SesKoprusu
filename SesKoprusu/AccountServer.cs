@@ -18,7 +18,7 @@ internal sealed class AccountServer : IDisposable
         info.ArgumentList.Add("app-server");
         info.ArgumentList.Add("--listen");
         info.ArgumentList.Add("stdio://");
-        var server = new AccountServer(Process.Start(info) ?? throw new IOException("App Server başlatılamadı."));
+        var server = new AccountServer(Process.Start(info) ?? throw new IOException("Could not start App Server."));
         server.process.ErrorDataReceived += (_, _) => { };
         server.process.BeginErrorReadLine();
         try
@@ -38,7 +38,7 @@ internal sealed class AccountServer : IDisposable
 
     async Task<JsonElement> Read(CancellationToken token)
     {
-        var line = await process.StandardOutput.ReadLineAsync(token) ?? throw new IOException("App Server bağlantısı kesildi.");
+        var line = await process.StandardOutput.ReadLineAsync(token) ?? throw new IOException("App Server disconnected.");
         using var json = JsonDocument.Parse(line);
         return json.RootElement.Clone();
     }
@@ -51,7 +51,7 @@ internal sealed class AccountServer : IDisposable
         {
             var message = await Read(token);
             if (!message.TryGetProperty("id", out var reply) || !reply.TryGetInt32(out var n) || n != id) continue;
-            if (message.TryGetProperty("error", out _)) throw new IOException($"App Server isteği başarısız ({method}). Codex sürümünü ve hesap izinlerini kontrol edin.");
+            if (message.TryGetProperty("error", out _)) throw new IOException($"App Server request failed ({method}). Check the Codex version and account permissions.");
             return message.GetProperty("result");
         }
     }
@@ -71,7 +71,7 @@ internal sealed class AccountServer : IDisposable
         {
             var url = new Uri(start.GetProperty("verificationUrl").GetString()!);
             if (url.Scheme != "https" || url.Host is not ("auth.openai.com" or "chatgpt.com") || !url.IsDefaultPort || url.UserInfo.Length != 0)
-                throw new IOException("ChatGPT doğrulama adresi doğrulanamadı.");
+                throw new IOException("Could not verify the ChatGPT sign-in address.");
             show(start.GetProperty("userCode").GetString()!, url);
             while (true)
             {
@@ -79,7 +79,7 @@ internal sealed class AccountServer : IDisposable
                 if (!message.TryGetProperty("method", out var method) || method.GetString() != "account/login/completed") continue;
                 var result = message.GetProperty("params");
                 if (result.GetProperty("loginId").GetString() != id) continue;
-                if (!result.GetProperty("success").GetBoolean()) throw new IOException("Giriş tamamlanmadı. Yeni kodla tekrar deneyin.");
+                if (!result.GetProperty("success").GetBoolean()) throw new IOException("Sign-in was not completed. Try again with a fresh code.");
                 return;
             }
         }

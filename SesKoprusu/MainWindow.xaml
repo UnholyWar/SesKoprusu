@@ -7,30 +7,35 @@
  <Grid>
   <Canvas IsHitTestVisible="False" ClipToBounds="True" Opacity=".65"><Path Fill="#DECBFF" Data="M34,11 l1,4 4,1 -4,1 -1,4 -1,-4 -4,-1 4,-1 Z M211,25 l1,3 3,1 -3,1 -1,3 -1,-3 -3,-1 3,-1 Z M311,99 l1,3 3,1 -3,1 -1,3 -1,-3 -3,-1 3,-1 Z"/><Path Stroke="#AF8DD0" StrokeThickness="2" Data="M76,8h2 M160,17h1 M304,9h2 M360,52h1 M18,86h2 M262,126h2 M378,174h2 M35,206h2"/></Canvas>
   <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="18,15">
-   <DockPanel><Button x:Name="Nav" DockPanel.Dock="Right" Content="Codex Ayarları" Click="SettingsClick"/><TextBlock FontSize="23" FontWeight="SemiBold" Text="SesKöprüsü"/></DockPanel>
-   <TextBlock x:Name="SessionState" Foreground="#D2B4EF" Margin="0,4,0,12" Text="Bağlantı kontrol ediliyor…" TextWrapping="Wrap"/>
+   <DockPanel><Button x:Name="Nav" DockPanel.Dock="Right" Content="Codex Settings" Click="SettingsClick"/><TextBlock FontSize="23" FontWeight="SemiBold" Text="SesKöprüsü"/></DockPanel>
+   <TextBlock x:Name="SessionState" Foreground="#D2B4EF" Margin="0,4,0,12" Text="Checking connection…" TextWrapping="Wrap"/>
    <StackPanel x:Name="HomePane">
-    <DockPanel Margin="0,0,0,10"><ToggleButton x:Name="Route" DockPanel.Dock="Right" Width="48" Height="26" AutomationProperties.Name="Ses köprüsünü aç veya kapat" Click="RouteClick">
+    <DockPanel Margin="0,0,0,10"><ToggleButton x:Name="Route" DockPanel.Dock="Right" Width="48" Height="26" AutomationProperties.Name="Toggle audio routing" Click="RouteClick">
      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Track" Background="#554B61" CornerRadius="13" Padding="3"><Ellipse x:Name="Thumb" Width="20" Fill="#FAF5FF" HorizontalAlignment="Left"/></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="#9754DB"/><Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Track" Property="Opacity" Value=".5"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
-    </ToggleButton><TextBlock Text="Ses köprüsü" VerticalAlignment="Center" FontWeight="SemiBold"/></DockPanel>
-    <DockPanel Margin="0,2"><ComboBox DockPanel.Dock="Right" x:Name="Incoming" SelectionChanged="LanguageChanged" AutomationProperties.Name="Gelen sesin hedef dili"/><TextBlock Text="Gelen sesin hedef dili" VerticalAlignment="Center"/></DockPanel>
-    <DockPanel Margin="0,2"><ComboBox DockPanel.Dock="Right" x:Name="Outgoing" SelectionChanged="LanguageChanged" AutomationProperties.Name="Giden sesin hedef dili"/><TextBlock Text="Giden sesin hedef dili" VerticalAlignment="Center"/></DockPanel>
+    </ToggleButton><TextBlock Text="Audio bridge" VerticalAlignment="Center" FontWeight="SemiBold"/></DockPanel>
+    <DockPanel Margin="0,2"><ComboBox DockPanel.Dock="Right" x:Name="Incoming" SelectionChanged="LanguageChanged" AutomationProperties.Name="Incoming audio language"/><TextBlock Text="Incoming audio language" VerticalAlignment="Center"/></DockPanel>
+    <DockPanel Margin="0,2"><ComboBox DockPanel.Dock="Right" x:Name="Outgoing" SelectionChanged="LanguageChanged" AutomationProperties.Name="Outgoing audio language"/><TextBlock Text="Outgoing audio language" VerticalAlignment="Center"/></DockPanel>
    </StackPanel>
    <StackPanel x:Name="Settings" Visibility="Collapsed">
-    <TextBlock Text="ChatGPT hesabı" FontWeight="SemiBold"/>
-    <WrapPanel><Button x:Name="Login" Content="Cihaz koduyla giriş" Click="LoginClick"/><Button x:Name="Test" Content="Durumu yenile" Click="TestClick"/></WrapPanel>
-    <WrapPanel><Button x:Name="Reconnect" Content="App Server’a yeniden bağlan" Click="ReconnectClick"/><Button Content="Hesap güvenliği ↗" Click="SecurityClick"/></WrapPanel>
+    <TextBlock Text="Audio devices" FontWeight="SemiBold"/>
+    <TextBlock x:Name="DriverState" TextWrapping="Wrap" Margin="0,3"/>
+    <WrapPanel><Button x:Name="Repair" Content="Install or enable devices" Click="RepairClick"/><Button Content="Get Cable A+B ↗" Click="LicenseClick"/></WrapPanel>
+    <TextBlock Text="Windows requires administrator approval to register the audio driver." TextWrapping="Wrap" Margin="0,3,0,10"/>
+    <TextBlock Text="ChatGPT account" FontWeight="SemiBold"/>
+    <WrapPanel><Button x:Name="Login" Content="Sign in with a device code" Click="LoginClick"/><Button x:Name="Test" Content="Refresh status" Click="TestClick"/></WrapPanel>
+    <WrapPanel><Button x:Name="Reconnect" Content="Reconnect to App Server" Click="ReconnectClick"/><Button Content="Account security ↗" Click="SecurityClick"/></WrapPanel>
     <StackPanel x:Name="Challenge" Visibility="Collapsed" Margin="0,6">
-     <TextBlock Text="ChatGPT doğrulama sayfasında bu kodu girin."/>
-     <TextBox x:Name="UserCode" IsReadOnly="True" FontSize="22" Padding="6" FontFamily="Consolas" AutomationProperties.Name="Tek kullanımlık cihaz kodu"/>
-     <Button Content="ChatGPT doğrulama sayfasını aç ↗" Click="VerificationClick"/>
+     <TextBlock Text="Enter this code on the ChatGPT verification page."/>
+     <TextBox x:Name="UserCode" IsReadOnly="True" FontSize="22" Padding="6" FontFamily="Consolas" AutomationProperties.Name="One-time device code"/>
+     <Button Content="Open verification page ↗" Click="VerificationClick"/>
     </StackPanel>
-    <Button x:Name="CancelLogin" Content="İptal" HorizontalAlignment="Left" Visibility="Collapsed" Click="CancelClick"/>
-    <TextBlock Text="Kodu yalnızca kendi başlattığınız girişte kullanın. Kimseyle paylaşmayın." TextWrapping="Wrap" Margin="0,4,0,10"/>
-    <TextBlock Text="OpenAI ses API anahtarı"/><PasswordBox x:Name="Key" PasswordChanged="KeyChanged" Padding="6" ToolTip="Yalnızca bu oturumda kullanılır"/>
+    <Button x:Name="CancelLogin" Content="Cancel" HorizontalAlignment="Left" Visibility="Collapsed" Click="CancelClick"/>
+    <TextBlock Text="Use this code only for your own sign-in. Never share it." TextWrapping="Wrap" Margin="0,4,0,10"/>
+    <TextBlock Text="OpenAI audio API key"/><PasswordBox x:Name="Key" PasswordChanged="KeyChanged" Padding="6" ToolTip="Used for this session"/>
     <TextBlock x:Name="SpeechState" Foreground="#D2B4EF" TextWrapping="Wrap" Margin="0,3,0,8"/>
-    <DockPanel><Button x:Name="Preview" DockPanel.Dock="Right" Content="Örneği dinle" Click="PreviewClick"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Seslendirme sesi"/></DockPanel>
+    <DockPanel><Button x:Name="Preview" DockPanel.Dock="Right" Content="Play sample" Click="PreviewClick"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Speaking voice"/></DockPanel>
    </StackPanel>
+   <ProgressBar x:Name="Transfer" Visibility="Collapsed" Height="6" Margin="0,8,0,0" Foreground="#BD8EFF"/>
    <TextBlock x:Name="Status" TextWrapping="Wrap" Foreground="#E4CFF7" Margin="0,6,0,0"/>
   </StackPanel></ScrollViewer>
  </Grid>

@@ -29,7 +29,7 @@ internal sealed class AudioTranslation : IDisposable
             if (!clips.Writer.TryWrite(chunk.ToArray()) && !stop.IsCancellationRequested)
                 {
                     stop.Cancel();
-                    failed("Çeviri ses akışına yetişemedi. Bağlantıyı kontrol edip tekrar deneyin.");
+                    failed("Translation fell behind playback. Check your connection and try again.");
                 }
             chunk.SetLength(0);
         };
@@ -89,7 +89,7 @@ internal sealed class AudioTranslation : IDisposable
             if (response.IsSuccessStatusCode) return response;
             var code = response.StatusCode;
             response.Dispose();
-            throw new HttpRequestException($"Ses API isteği başarısız ({code}).");
+            throw new HttpRequestException($"Audio API request failed ({code}).");
         }
     }
 

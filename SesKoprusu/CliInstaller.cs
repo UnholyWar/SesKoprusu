@@ -12,7 +12,7 @@ internal static class CliInstaller
     static readonly string DirectoryPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SesKoprusu", "tools", Release);
     public static string Executable => Path.Combine(DirectoryPath, "codex.exe");
 
-    public static async Task Ensure(HttpClient http, CancellationToken token)
+    public static async Task Ensure(HttpClient http, Action<double?> report, CancellationToken token)
     {
         if (CodexSession.FindCli() != null) return;
         Directory.CreateDirectory(DirectoryPath);
@@ -23,10 +23,10 @@ internal static class CliInstaller
             response.EnsureSuccessStatusCode();
             await using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920, true))
             {
-                await response.Content.CopyToAsync(file, token);
+                await Downloads.Copy(response.Content, file, report, token);
                 file.Position = 0;
                 var digest = Convert.ToHexString(await SHA256.HashDataAsync(file, token));
-                if (!digest.Equals(Digest, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Codex indirmesi bütünlük kontrolünden geçmedi.");
+                if (!digest.Equals(Digest, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Codex download failed its integrity check.");
             }
             File.Move(temp, Executable, true);
         }

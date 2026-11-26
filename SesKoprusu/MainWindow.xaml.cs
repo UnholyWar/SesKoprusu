@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     bool ready;
     bool signedIn;
     bool busy;
-    static readonly string[] Languages = ["Çevirme", "Türkçe", "İngilizce", "Almanca", "Fransızca", "İspanyolca", "Arapça", "Rusça", "Japonca"];
+    static readonly string[] Languages = ["Pass through", "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese"];
     string SpeechKey => Key.Password.Length > 0 ? Key.Password.Trim() : Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
     bool HasSpeechKey => !string.IsNullOrWhiteSpace(SpeechKey);
     bool connected;
@@ -31,6 +31,7 @@ public partial class MainWindow : Window
 
     void UpdateControls()
     {
+        Repair.IsEnabled = ready && !busy && !routing.Pending;
         Login.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
         Login.IsEnabled = ready && !busy && !signedIn;
         Reconnect.IsEnabled = ready && !busy;
@@ -38,7 +39,7 @@ public partial class MainWindow : Window
         Preview.IsEnabled = ready && !busy && connected && HasSpeechKey;
         Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         Route.IsEnabled = ready && !busy && (routing.Pending || connected);
-        SpeechState.Text = HasSpeechKey ? "Ses anahtarı tanımlı." : "Çeviri ve ses önizlemesi için API anahtarı girin.";
+        SpeechState.Text = HasSpeechKey ? "Audio API key provided." : "Enter your API key for translation and voice previews.";
     }
 
     async Task<bool> CheckSession()
@@ -47,19 +48,19 @@ public partial class MainWindow : Window
         try
         {
             cliFound = CodexSession.FindCli() != null;
-            if (!cliFound) { signedIn = false; SessionState.Text = "İlk bağlantıda Codex otomatik hazırlanır"; return false; }
+            if (!cliFound) { signedIn = false; SessionState.Text = "Codex will be installed at first sign-in"; return false; }
             using var accountTimeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             accountTimeout.CancelAfter(TimeSpan.FromSeconds(15));
             signedIn = await CodexSession.SignedIn(accountTimeout.Token);
-            if (!signedIn) { SessionState.Text = "Oturum kapalı · Codex Ayarları’ndan giriş yapın"; return false; }
-            SessionState.Text = "Codex bağlantısı test ediliyor…";
+            if (!signedIn) { SessionState.Text = "Signed out · Open Codex Settings to sign in"; return false; }
+            SessionState.Text = "Testing the Codex connection…";
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             timeout.CancelAfter(TimeSpan.FromSeconds(40));
-            await CodexSession.Ask("Yalnızca OK yaz.", timeout.Token);
+            await CodexSession.Ask("Reply with OK.", timeout.Token);
             connected = true;
-            SessionState.Text = "●  Codex bağlı";
+            SessionState.Text = "●  Codex connected";
         }
-        catch (Exception ex) { SessionState.Text = signedIn ? "Oturum kayıtlı · Bağlantıyı yeniden deneyin" : "○  Hesap durumu doğrulanamadı"; Status.Text = ex is OperationCanceledException ? "Bağlantı testi zaman aşımına uğradı." : ex.Message; }
+        catch (Exception ex) { SessionState.Text = signedIn ? "Session saved · Retry connection" : "○  Account status unavailable"; Status.Text = ex is OperationCanceledException ? "The connection test timed out." : ex.Message; }
         finally { UpdateControls(); }
         return connected;
     }
@@ -68,14 +69,14 @@ public partial class MainWindow : Window
     {
         if (loginAttempt != null)
         {
-            Status.Text = "Tarayıcıda cihaz kodu onayı bekleniyor.";
+            Status.Text = "Waiting for device approval in your browser.";
             try
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(loginAttempt.Token);
                 timeout.CancelAfter(TimeSpan.FromSeconds(10));
-                if (await CodexSession.SignedIn(timeout.Token)) Status.Text = "Hesap oturumu açık.";
+                if (await CodexSession.SignedIn(timeout.Token)) Status.Text = "Signed in.";
             }
-            catch (Exception) { if (loginAttempt != null) Status.Text = "Hesap durumu alınamadı."; }
+            catch (Exception) { if (loginAttempt != null) Status.Text = "Could not read account status."; }
             return;
         }
         busy = true;
@@ -108,10 +109,12 @@ public partial class MainWindow : Window
         UpdateControls();
         try
         {
-            if (CodexSession.FindCli() == null) SessionState.Text = "Codex indiriliyor…";
-            await CliInstaller.Ensure(http, attempt.Token);
+            if (CodexSession.FindCli() == null) SessionState.Text = "Downloading Codex…";
+            await CliInstaller.Ensure(http, p => Progress("Downloading Codex…", p), attempt.Token);
+            Transfer.Visibility = Visibility.Collapsed;
             cliFound = true;
-            SessionState.Text = "App Server’a bağlanılıyor…";
+            Status.Text = "";
+            SessionState.Text = "Connecting to App Server…";
             using var server = await AccountServer.Connect(attempt.Token);
             if (login && !await server.HasChatGptAccount(attempt.Token))
                 await server.Login((code, url) =>
@@ -119,15 +122,16 @@ public partial class MainWindow : Window
                     UserCode.Text = code;
                     verificationUrl = url;
                     Challenge.Visibility = Visibility.Visible;
-                    SessionState.Text = "Tarayıcıda giriş onayı bekleniyor…";
+                    SessionState.Text = "Waiting for browser approval…";
                     UpdateControls();
                     OpenPage(url.AbsoluteUri);
                 }, attempt.Token);
         }
-        catch (OperationCanceledException) { Status.Text = "İşlem iptal edildi veya süresi doldu."; }
+        catch (OperationCanceledException) { Status.Text = "The request was canceled or expired."; }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally
         {
+            Transfer.Visibility = Visibility.Collapsed;
             verificationUrl = null;
             UserCode.Clear();
             Challenge.Visibility = CancelLogin.Visibility = Visibility.Collapsed;
@@ -151,13 +155,16 @@ public partial class MainWindow : Window
         InitializeComponent();
         try { ownsInstance = instance.WaitOne(0); }
         catch (AbandonedMutexException) { ownsInstance = true; }
-        if (!ownsInstance) { MessageBox.Show("SesKöprüsü zaten açık."); Loaded += (_, _) => Close(); return; }
+        if (!ownsInstance) { MessageBox.Show("SesKöprüsü is already running."); Loaded += (_, _) => Close(); return; }
         Incoming.ItemsSource = Outgoing.ItemsSource = Languages;
         Incoming.SelectedIndex = Outgoing.SelectedIndex = 0;
         try
         {
             if (Local.Has("languages") && Local.Read<string[]>("languages") is [var incoming, var outgoing])
             {
+                string[] legacy = ["Çevirme", "Türkçe", "İngilizce", "Almanca", "Fransızca", "İspanyolca", "Arapça", "Rusça", "Japonca"];
+                if (Array.IndexOf(legacy, incoming) is var i && i >= 0) incoming = Languages[i];
+                if (Array.IndexOf(legacy, outgoing) is var j && j >= 0) outgoing = Languages[j];
                 if (Languages.Contains(incoming)) Incoming.SelectedItem = incoming;
                 if (Languages.Contains(outgoing)) Outgoing.SelectedItem = outgoing;
             }
@@ -183,7 +190,61 @@ public partial class MainWindow : Window
         bool open = Settings.Visibility == Visibility.Collapsed;
         Settings.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         HomePane.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        Nav.Content = open ? "Geri" : "Codex Ayarları";
+        if (open) TryRefreshDrivers();
+        Nav.Content = open ? "Back" : "Codex Settings";
+    }
+
+    void Progress(string label, double? value)
+    {
+        Transfer.Visibility = Visibility.Visible;
+        Transfer.IsIndeterminate = value == null;
+        Transfer.Value = value ?? 0;
+        Status.Text = value.HasValue ? $"{label} {value:0}%" : label;
+    }
+
+    bool NeedsSecondCable => Outgoing.SelectedItem is string language && language != "Pass through";
+
+    void RefreshDrivers()
+    {
+        var missing = routing.Missing(NeedsSecondCable);
+        DriverState.Text = missing == null ? "Required audio devices are ready." :
+            $"{missing} is missing or disabled. Select Install or enable devices.";
+    }
+
+    void LicenseClick(object sender, RoutedEventArgs e) => OpenPage("https://vb-audio.com/Cable/");
+
+    async void RepairClick(object sender, RoutedEventArgs e)
+    {
+        busy = true;
+        UpdateControls();
+        try
+        {
+            var missing = routing.Missing(NeedsSecondCable, activate: true);
+            if (missing == null) { Status.Text = "Audio devices are ready."; return; }
+            while (missing != null)
+            {
+                string? zip = null;
+                if (missing == "CABLE-A")
+                {
+                    var picker = new Microsoft.Win32.OpenFileDialog { Filter = "VB-Audio A+B package|*.zip", Title = "Select your licensed VB-CABLE A+B package" };
+                    if (picker.ShowDialog(this) != true) { Status.Text = "Use Get Cable A+B to obtain the vendor package."; return; }
+                    zip = picker.FileName;
+                }
+                await DriverSetup.Install(http, zip, Progress, lifetime.Token);
+                var remaining = routing.Missing(NeedsSecondCable, activate: true);
+                if (remaining == missing) break; // The installer may require a reboot.
+                missing = remaining;
+            }
+            Status.Text = routing.Missing(NeedsSecondCable, true) == null ? "Devices ready. Return to the bridge and switch it on." :
+                "Finish the driver installation and restart Windows if requested. Then check the devices again.";
+        }
+        catch (Exception ex) { Status.Text = ex.Message; }
+        finally { Transfer.Visibility = Visibility.Collapsed; busy = false; UpdateControls(); TryRefreshDrivers(); }
+    }
+
+    void TryRefreshDrivers()
+    {
+        try { RefreshDrivers(); } catch (Exception ex) { DriverState.Text = ex.Message; }
     }
 
     void LanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -197,7 +258,7 @@ public partial class MainWindow : Window
     {
         if (!ready) return;
         try { Local.Save("voice", (string)Voice.SelectedItem); }
-        catch (Exception ex) { Status.Text = "Ses tercihi kaydedilemedi. " + ex.Message; }
+        catch (Exception ex) { Status.Text = "Could not save the voice preference. " + ex.Message; }
     }
 
     async void RouteClick(object sender, RoutedEventArgs e)
@@ -208,10 +269,16 @@ public partial class MainWindow : Window
             {
                 busy = true;
                 UpdateControls();
+                if (routing.Missing(NeedsSecondCable) is string missing)
+                {
+                    if (!Settings.IsVisible) SettingsClick(this, e);
+                    Status.Text = $"{missing} needs setup. Select Install or enable devices to continue.";
+                    return;
+                }
                 if (!await CheckSession()) return;
                 string incoming = (string)Incoming.SelectedItem, outgoing = (string)Outgoing.SelectedItem;
-                if ((incoming != "Çevirme" || outgoing != "Çevirme") && !HasSpeechKey)
-                    throw new InvalidOperationException("Çeviri için Codex Ayarları’na ses API anahtarını girin.");
+                if ((incoming != "Pass through" || outgoing != "Pass through") && !HasSpeechKey)
+                    throw new InvalidOperationException("Enter your audio API key in Codex Settings to translate.");
                 routing.Enable(incoming, outgoing, (string)Voice.SelectedItem, SpeechKey, http, error => Dispatcher.InvokeAsync(() =>
                 {
                     try { routing.Restore(); Status.Text = error; }
@@ -221,7 +288,7 @@ public partial class MainWindow : Window
                 }));
             }
             else routing.Restore();
-            Status.Text = routing.Pending ? "Sanal yönlendirme açık." : "Önceki aygıtlar geri yüklendi.";
+            Status.Text = routing.Pending ? "Audio bridge is on." : "Your previous devices have been restored.";
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { busy = false; Route.IsChecked = routing.Pending; UpdateControls(); }
@@ -230,7 +297,7 @@ public partial class MainWindow : Window
     async Task<HttpResponseMessage> Post(string path, object body)
     {
         var key = SpeechKey;
-        if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("OpenAI bağlantısı için OPENAI_API_KEY ayarlayın.");
+        if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("Enter your OpenAI API key in Codex Settings.");
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/" + path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         request.Content = JsonContent.Create(body);
@@ -238,7 +305,7 @@ public partial class MainWindow : Window
         if (response.IsSuccessStatusCode) return response;
         var code = response.StatusCode;
         response.Dispose();
-        throw new HttpRequestException($"OpenAI isteği başarısız ({code}).");
+        throw new HttpRequestException($"OpenAI request failed ({code}).");
     }
 
     async Task Speak(string text)
@@ -260,8 +327,8 @@ public partial class MainWindow : Window
     {
         busy = true;
         UpdateControls();
-        Status.Text = "İşleniyor…";
-        try { if (!await CheckSession()) { Status.Text = "Devam etmek için Codex Ayarları üzerinden oturum açın."; return; } await action(); Status.Text = "Tamamlandı."; }
+        Status.Text = "Working…";
+        try { if (!await CheckSession()) { Status.Text = "Sign in through Codex Settings to continue."; return; } await action(); Status.Text = "Done."; }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { busy = false; UpdateControls(); }
     }

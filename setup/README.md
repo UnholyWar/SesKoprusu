@@ -21,3 +21,5 @@ setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sü
 7. Gelen sesi kulaklıkta, giden sesi ayrı bir görüşme istemcisinde dinleyin. Oturumu kapatıp yeniden açınca iki dil tercihini doğrulayın.
 
 Oturum kalıcılığını sınamak için ilk başarılı girişten sonra uygulamayı kapatıp aynı Windows kullanıcısıyla yeniden açın. Kayıtlı ChatGPT oturumu otomatik okunmalı ve yeni kod gösterilmemelidir. Bağlantı kesilirse ağı geri getirip Durumu yenile düğmesini kullanın.
+
+Codex Settings → Audio devices bölümündeki Install or enable devices seçeneği, devre dışı uçları etkinleştirir. Temel sürücü yoksa paketlenmiş kurucuyu veya VB-Audio’nun resmî indirmesini kullanır. Giden ses için ayrıca üreticiden edinilen A+B zip dosyasını seçin. İndirmeler ve çalışma dosyaları %LOCALAPPDATA%\SesKoprusu altında tutulur. Paketle gelen araçlar uygulama klasöründen kullanılır. Windows sürücü kaydı yönetici onayı ve bazen yeniden başlatma gerektirir.

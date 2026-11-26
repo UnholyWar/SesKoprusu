@@ -8,8 +8,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputBaseFilename=SesKoprusu-Setup
 [Files]
 Source: "publish\*"; DestDir: "{app}"; Flags: recursesubdirs
-Source: "{#GetEnv('SESKOPRUSU_DRIVER')}\*"; DestDir: "{tmp}\VB-CABLE"; Flags: recursesubdirs deleteafterinstall
+Source: "{#GetEnv('SESKOPRUSU_DRIVER')}\*"; DestDir: "{app}\drivers\VB-CABLE"; Flags: recursesubdirs
 [Icons]
 Name: "{commonprograms}\SesKöprüsü"; Filename: "{app}\SesKoprusu.exe"
 [Run]
-Filename: "{tmp}\VB-CABLE\VBCABLE_Setup_x64.exe"; StatusMsg: "VB-CABLE kuruluyor…"; Flags: waituntilterminated
+Filename: "{app}\drivers\VB-CABLE\VBCABLE_Setup_x64.exe"; StatusMsg: "Installing VB-CABLE…"; Flags: waituntilterminated
