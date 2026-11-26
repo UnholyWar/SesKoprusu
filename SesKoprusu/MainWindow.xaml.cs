@@ -31,7 +31,8 @@ public partial class MainWindow : Window
 
     void UpdateControls()
     {
-        Login.IsEnabled = ready && !busy;
+        Login.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
+        Login.IsEnabled = ready && !busy && !signedIn;
         Reconnect.IsEnabled = ready && !busy;
         Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
         Preview.IsEnabled = ready && !busy && connected && HasSpeechKey;
@@ -43,11 +44,10 @@ public partial class MainWindow : Window
     async Task<bool> CheckSession()
     {
         connected = false;
-        signedIn = false;
         try
         {
             cliFound = CodexSession.FindCli() != null;
-            if (!cliFound) { SessionState.Text = "Oturum kapalı · İlk girişte Codex otomatik indirilir"; return false; }
+            if (!cliFound) { signedIn = false; SessionState.Text = "İlk bağlantıda Codex otomatik hazırlanır"; return false; }
             using var accountTimeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             accountTimeout.CancelAfter(TimeSpan.FromSeconds(15));
             signedIn = await CodexSession.SignedIn(accountTimeout.Token);
@@ -59,7 +59,7 @@ public partial class MainWindow : Window
             connected = true;
             SessionState.Text = "●  Codex bağlı";
         }
-        catch (Exception ex) { SessionState.Text = "○  Bağlantı doğrulanamadı"; Status.Text = ex is OperationCanceledException ? "Bağlantı testi zaman aşımına uğradı." : ex.Message; }
+        catch (Exception ex) { SessionState.Text = signedIn ? "Oturum kayıtlı · Bağlantıyı yeniden deneyin" : "○  Hesap durumu doğrulanamadı"; Status.Text = ex is OperationCanceledException ? "Bağlantı testi zaman aşımına uğradı." : ex.Message; }
         finally { UpdateControls(); }
         return connected;
     }
@@ -113,7 +113,7 @@ public partial class MainWindow : Window
             cliFound = true;
             SessionState.Text = "App Server’a bağlanılıyor…";
             using var server = await AccountServer.Connect(attempt.Token);
-            if (login)
+            if (login && !await server.HasChatGptAccount(attempt.Token))
                 await server.Login((code, url) =>
                 {
                     UserCode.Text = code;

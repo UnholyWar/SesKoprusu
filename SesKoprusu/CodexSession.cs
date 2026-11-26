@@ -65,9 +65,7 @@ internal static class CodexSession
     public static async Task<bool> SignedIn(CancellationToken token)
     {
         using var server = await AccountServer.Connect(token);
-        var result = await server.Call("account/read", new { refreshToken = false }, token);
-        return result.GetProperty("account") is { ValueKind: System.Text.Json.JsonValueKind.Object } account &&
-               account.GetProperty("type").GetString() == "chatgpt";
+        return await server.HasChatGptAccount(token);
     }
 
     public static async Task<string> Ask(string prompt, CancellationToken token)

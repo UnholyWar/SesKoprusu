@@ -56,6 +56,13 @@ internal sealed class AccountServer : IDisposable
         }
     }
 
+    public async Task<bool> HasChatGptAccount(CancellationToken token)
+    {
+        var result = await Call("account/read", new { refreshToken = false }, token);
+        return result.GetProperty("account") is { ValueKind: System.Text.Json.JsonValueKind.Object } account &&
+               account.GetProperty("type").GetString() == "chatgpt";
+    }
+
     public async Task Login(Action<string, Uri> show, CancellationToken token)
     {
         var start = await Call("account/login/start", new { type = "chatgptDeviceCode" }, token);
