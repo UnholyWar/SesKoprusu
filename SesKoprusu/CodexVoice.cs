@@ -21,7 +21,22 @@ internal static class CodexVoice
         var threadId = thread.GetProperty("thread").GetProperty("id").GetString()!;
         await server.Call("thread/realtime/start", new { threadId, version = "v2", outputModality = "audio",
             voice = voice == Default ? null : voice, prompt = instructions, transport = new { type = "websocket" } }, token);
-        return threadId;
+        while (true)
+        {
+            var message = await server.NextEvent(token);
+            if (!message.TryGetProperty("method", out var method) || !message.TryGetProperty("params", out var payload) ||
+                !payload.TryGetProperty("threadId", out var id) || id.GetString() != threadId) continue;
+            if (method.GetString() == "thread/realtime/started") return threadId;
+            CheckVoiceFailure(method.GetString(), payload);
+        }
+    }
+
+    static void CheckVoiceFailure(string? method, System.Text.Json.JsonElement payload)
+    {
+        if (method == "thread/realtime/error")
+            throw new IOException("Codex voice error: " + AccountServer.Detail(payload, "message"));
+        if (method == "thread/realtime/closed")
+            throw new IOException("Codex voice connection closed: " + AccountServer.Detail(payload, "reason"));
     }
 
     public static async Task Play(AccountServer server, string threadId, MMDevice destination, bool preview, CancellationToken token)
@@ -35,11 +50,13 @@ internal static class CodexVoice
             System.Text.Json.JsonElement message;
             try { message = await server.NextEvent(wait.Token); }
             catch (OperationCanceledException) when (preview && buffer != null && !token.IsCancellationRequested) { break; }
-            if (message.TryGetProperty("error", out _)) throw new IOException("Codex rejected the realtime audio request.");
+            if (message.TryGetProperty("error", out var error)) throw new IOException("Codex rejected the audio request: " + AccountServer.Detail(error, "message"));
             if (!message.TryGetProperty("method", out var method) || !message.TryGetProperty("params", out var p) ||
                 !p.TryGetProperty("threadId", out var id) || id.GetString() != threadId) continue;
-            if (method.GetString() is "thread/realtime/error" or "thread/realtime/closed")
-                throw new IOException("The Codex voice session ended. Check realtime voice access for your account.");
+            if (preview && buffer != null && method.GetString() == "thread/realtime/closed"
+                && (!p.TryGetProperty("reason", out var reason) || reason.GetString() is null or "completed" or "normal"))
+                break;
+            CheckVoiceFailure(method.GetString(), p);
             if (method.GetString() != "thread/realtime/outputAudio/delta") continue;
             var audio = p.GetProperty("audio");
             var bytes = Convert.FromBase64String(audio.GetProperty("data").GetString()!);

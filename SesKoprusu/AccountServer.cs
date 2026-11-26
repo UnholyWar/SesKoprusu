@@ -64,14 +64,22 @@ internal sealed class AccountServer : IDisposable
                     pendingAudio.Enqueue(message);
                 continue;
             }
-            if (message.TryGetProperty("error", out _)) throw new IOException($"App Server request failed ({method}). Check the Codex version and account permissions.");
+            if (message.TryGetProperty("error", out var error)) throw new IOException($"App Server request failed ({method}). {Detail(error, "message")}");
             return message.GetProperty("result");
         }
     }
 
-    public async Task<bool> HasChatGptAccount(CancellationToken token)
+    internal static string Detail(JsonElement payload, string field)
     {
-        var result = await Call("account/read", new { refreshToken = false }, token);
+        if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty(field, out var value) ||
+            value.ValueKind != JsonValueKind.String) return "No further details were provided.";
+        var detail = value.GetString()!.Trim();
+        return detail.Length > 400 ? detail[..400] : detail;
+    }
+
+    public async Task<bool> HasChatGptAccount(CancellationToken token, bool refreshToken = false)
+    {
+        var result = await Call("account/read", new { refreshToken }, token);
         return result.GetProperty("account") is { ValueKind: System.Text.Json.JsonValueKind.Object } account &&
                account.GetProperty("type").GetString() == "chatgpt";
     }

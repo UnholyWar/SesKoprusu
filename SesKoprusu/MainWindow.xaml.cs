@@ -27,8 +27,8 @@ public partial class MainWindow : Window
     void UpdateControls()
     {
         ImportPackage.IsEnabled = Repair.IsEnabled = DeviceRefresh.IsEnabled = ready && !busy && !routing.Pending;
-        Login.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
-        Login.IsEnabled = ready && !busy && !signedIn;
+        Login.Content = signedIn ? "Sign in again" : "Sign in with a device code";
+        Login.IsEnabled = ready && !busy && !routing.Pending;
         Reconnect.IsEnabled = ready && !busy;
         Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
         Preview.IsEnabled = ready && !busy && connected;
@@ -60,7 +60,7 @@ public partial class MainWindow : Window
                 {
                     var voices = await CodexVoice.Choices(timeout.Token);
                     LoadVoices(voices);
-                    SpeechState.Text = "Voice output uses your signed-in Codex session.";
+                    SpeechState.Text = "Codex voice list loaded. Use Play sample to test audio.";
                     catalogLoaded = true;
                 }
                 catch (Exception) { SpeechState.Text = "Voice list unavailable. Preview to check Codex realtime access."; }
@@ -122,7 +122,8 @@ public partial class MainWindow : Window
             Status.Text = "";
             SessionState.Text = "Connecting to App Server…";
             using var server = await AccountServer.Connect(attempt.Token);
-            if (login && !await server.HasChatGptAccount(attempt.Token))
+            catalogLoaded = false;
+            if (login)
                 await server.Login((code, url) =>
                 {
                     UserCode.Text = code;
@@ -132,6 +133,8 @@ public partial class MainWindow : Window
                     UpdateControls();
                     OpenPage(url.AbsoluteUri);
                 }, attempt.Token);
+            else
+                await server.HasChatGptAccount(attempt.Token, refreshToken: true);
         }
         catch (OperationCanceledException) { Status.Text = "The request was canceled or expired."; }
         catch (Exception ex) { Status.Text = ex.Message; }
