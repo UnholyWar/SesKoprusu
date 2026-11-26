@@ -64,7 +64,14 @@ internal static class CodexVoice
         await peer.createDataChannel("oai-events").WaitAsync(startup.Token);
         var offer = peer.createOffer(null);
         await peer.setLocalDescription(offer);
-        var thread = await server.Call("thread/start", new { ephemeral = true, sandbox = "read-only", approvalPolicy = "never" }, startup.Token);
+        var thread = await server.Call("thread/start", new
+        {
+            model = "gpt-6.2-sol",
+            config = new Dictionary<string, object> { ["model_reasoning_effort"] = "low" },
+            ephemeral = true,
+            sandbox = "read-only",
+            approvalPolicy = "never"
+        }, startup.Token);
         var threadId = thread.GetProperty("thread").GetProperty("id").GetString()!;
         var options = new Dictionary<string, object?>
         {

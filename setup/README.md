@@ -8,7 +8,7 @@ Derleme makinesinde .NET 10 SDK ve Inno Setup 6 kurulu olmalı. ISCC.exe dosyas�
 
 İsteğe bağlı çevrimdışı paketleme için -CodexDirectory ile resmî Windows x64 Codex CLI paketinin codex.exe ve yardımcı dosyalarını içeren klasörü kullanın. Uygulama açılınca Codex Ayarları üzerinden cihaz koduyla giriş yapın. Parola ve ikinci doğrulama adımı tarayıcıdaki ChatGPT giriş sayfasında tamamlanır. Oturum SesKöprüsü için ayrı tutulur.
 
-setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sürücü sihirbazını tamamlayıp Windows'u yeniden başlatın. İlk çalıştırmada Windows varsayılan çıkışını dinleyeceğiniz fiziksel aygıta ayarlayın. Seslendirme için Codex hesabında realtime ses erişimi gerekir. SESKOPRUSU_CODEX_MODEL ile hesabınızdaki CLI uyumlu Codex modelini seçebilirsiniz.
+setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sürücü sihirbazını tamamlayıp Windows'u yeniden başlatın. İlk çalıştırmada Windows varsayılan çıkışını dinleyeceğiniz fiziksel aygıta ayarlayın. Seslendirme için Codex hesabında realtime ses erişimi gerekir. Ses oturumunu destekleyen Codex iş parçacığı gpt-6.2-sol ve low muhakeme düzeyini kullanır. Ses akışı ayrı realtime modeliyle yürür.
 
 ## Windows kabul testi
 
@@ -16,7 +16,7 @@ setup/Output/SesKoprusu-Setup.exe uygulama ile sürücü kurulumunu içerir. Sü
 2. YouTube'da konuşma içeren bir video açın. Oynatma sürerken anahtarı açın. Windows varsayılanlarının CABLE Input ve CABLE Output olduğunu ve kayıt panelinde CABLE Output göstergesinin videodaki sesle hareket ettiğini kontrol edin. Konuşmanın önceki hoparlör veya kulaklıktan duyulduğunu dinleyerek doğrulayın.
 3. Videoyu durdurmadan anahtarı kapatın. Dört varsayılanı ilk kayıtla karşılaştırın ve sesi dinleyin. İşlemi tekrarlayıp anahtar açıkken uygulamayı kapatın ve aynı karşılaştırmayı yapın.
 4. Anahtar açıkken Görev Yöneticisi ile uygulamayı sonlandırın. Yeniden açılışta kayıtlı aygıtların geri geldiğini kontrol edin.
-5. Codex Ayarları'ndan cihaz koduyla giriş yapın. Bağlantı testi gerçek bir kısa Codex isteği gönderir. Başarılı olduğunda ana ekranda “Codex bağlı” görünür. CLI eksikse ilk girişte resmî Windows x64 bileşeni kullanıcı klasörüne indirilir ve SHA-256 doğrulanır. ChatGPT hesabı bölümünde gösterilen yeni kodu açılan doğrulama sayfasına girin. İptal işlemi kodu ekrandan kaldırır. Durumu yenile ile oturumu kontrol edebilirsiniz.
+5. Codex Ayarları'ndan cihaz koduyla giriş yapın. Bağlantı testi hesap kullanım limitlerini sorgular; modelden metin üretmesini istemez. Başarılı olduğunda ana ekranda “Codex bağlı” görünür. CLI eksikse ilk girişte resmî Windows x64 bileşeni kullanıcı klasörüne indirilir ve SHA-256 doğrulanır. ChatGPT hesabı bölümünde gösterilen yeni kodu açılan doğrulama sayfasına girin. İptal işlemi kodu ekrandan kaldırır. Durumu yenile ile oturumu kontrol edebilirsiniz.
 6. Voice sekmesinde Codex default veya oturumun sunduğu bir sesi seçin. Türkçe örneği dinleyin. Gelen ses için VB-CABLE, yalnızca giden çeviri için de temel VB-CABLE yeterlidir. İki yön aynı anda yönlendirildiğinde ayrıca VB-CABLE A gerekir. İki yönü birlikte yönlendirmek için VB-Audio A+B paketini kurun. İki yönün hedef dilini ayrı seçin. Anahtarı açtığınızda seçilen yönün sesi Codex App Server realtime oturumuna iletilir. Codex’in ses çıkışı seçilen aygıtta oynatılır. Dil seçimini değiştirmek için anahtarı kapatın.
 7. Gelen sesi kulaklıkta, giden sesi ayrı bir görüşme istemcisinde dinleyin. Oturumu kapatıp yeniden açınca iki dil tercihini doğrulayın.
 

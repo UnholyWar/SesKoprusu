@@ -52,7 +52,8 @@ public partial class MainWindow : Window
             SessionState.Text = "Testing the Codex connection…";
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             timeout.CancelAfter(TimeSpan.FromSeconds(40));
-            await CodexSession.Ask("Reply with OK.", timeout.Token);
+            using var server = await AccountServer.Connect(timeout.Token);
+            await server.Call("account/rateLimits/read", new { }, timeout.Token);
             connected = true;
             SessionState.Text = "●  Codex connected";
             if (!catalogLoaded)

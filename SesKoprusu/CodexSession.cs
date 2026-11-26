@@ -31,34 +31,10 @@ internal static class CodexSession
         return info;
     }
 
-    static async Task<(int Code, string Output, string Error)> Run(string[] args, CancellationToken token, string? prompt = null)
-    {
-        var info = StartInfo();
-        info.RedirectStandardInput = prompt != null;
-        foreach (var arg in args) info.ArgumentList.Add(arg);
-        if (prompt != null) info.StandardInputEncoding = new UTF8Encoding(false);
-        using var process = Process.Start(info) ?? throw new IOException("Could not start Codex.");
-        using var cancel = token.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        if (prompt != null) { await process.StandardInput.WriteAsync(prompt); process.StandardInput.Close(); }
-        await process.WaitForExitAsync(token);
-        return (process.ExitCode, await output, await error);
-    }
-
     public static async Task<bool> SignedIn(CancellationToken token)
     {
         using var server = await AccountServer.Connect(token);
         return await server.HasChatGptAccount(token);
     }
 
-    public static async Task<string> Ask(string prompt, CancellationToken token)
-    {
-        var args = new List<string> { "exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check" };
-        if (Environment.GetEnvironmentVariable("SESKOPRUSU_CODEX_MODEL") is { Length: > 0 } model) args.AddRange(["--model", model]);
-        args.Add("-");
-        var result = await Run(args.ToArray(), token, prompt);
-        if (result.Code != 0 || string.IsNullOrWhiteSpace(result.Output)) throw new IOException("Codex did not respond. Check your session and network connection.");
-        return result.Output.Trim();
-    }
 }
