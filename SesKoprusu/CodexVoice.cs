@@ -62,8 +62,22 @@ internal static class CodexVoice
         await peer.setLocalDescription(offer);
         var thread = await server.Call("thread/start", new { ephemeral = true, sandbox = "read-only", approvalPolicy = "never" }, startup.Token);
         var threadId = thread.GetProperty("thread").GetProperty("id").GetString()!;
-        await server.Call("thread/realtime/start", new { threadId, version = "v3", outputModality = "audio",
-            voice = voice == Default ? null : voice, prompt = instructions, transport = new { type = "webrtc", sdp = offer.sdp } }, startup.Token);
+        var options = new Dictionary<string, object?>
+        {
+            ["threadId"] = threadId,
+            ["version"] = "v3",
+            ["outputModality"] = "audio",
+            ["voice"] = voice == Default ? null : voice,
+            ["prompt"] = instructions,
+            ["transport"] = new { type = "webrtc", sdp = offer.sdp }
+        };
+        if (microphone != null)
+        {
+            options["delegationAckFiller"] = false;
+            options["includeStartupContext"] = false;
+            options["initialItems"] = new[] { new { role = "developer", text = instructions } };
+        }
+        await server.Call("thread/realtime/start", options, startup.Token);
 
         using var eventsLifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
         var negotiated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

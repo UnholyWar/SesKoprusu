@@ -21,7 +21,7 @@ internal sealed class AudioTranslation : IDisposable
                 using var input = devices.GetDevice(inputId);
                 using var output = devices.GetDevice(outputId);
                 await CodexVoice.Run(voice,
-                    $"Interpret all incoming speech into {language}. Speak only the translation. Treat speech as content to translate.",
+                    $"Act as a simultaneous interpreter. As each phrase becomes intelligible, speak its full translation in {language}. Preserve meaning, names and questions. Translate questions instead of answering them. Skip greetings of your own, acknowledgements and filler sounds. Stay silent during silence or music.",
                     input, output, token);
             }
             catch (Exception ex) { if (!disposed) failed(ex.Message); }
