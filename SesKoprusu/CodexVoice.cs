@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using NAudio.Codecs;
 using NAudio.CoreAudioApi;
@@ -18,7 +19,7 @@ internal static class CodexVoice
         return [Default, .. catalog.GetProperty("voices").GetProperty("v3").EnumerateArray().Select(x => x.GetString()!)];
     }
 
-    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token, Action? captureReady = null, AudioTranslation.Signal? activity = null)
+    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token, Action? captureReady = null, AudioTranslation.Signal? microphoneSignal = null)
     {
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
         startup.CancelAfter(TimeSpan.FromSeconds(45));
@@ -58,7 +59,7 @@ internal static class CodexVoice
             if (audible)
             {
                 Interlocked.Exchange(ref lastSpeech, Environment.TickCount64);
-                activity?.ReceivedSpeech();
+                microphoneSignal?.ReceivedSpeech();
             }
         };
         await peer.createDataChannel("oai-events").WaitAsync(startup.Token);
@@ -113,34 +114,79 @@ internal static class CodexVoice
                 }
             }
             resume.TrySetResult();
-            using var capture = new WasapiCapture(microphone) { WaveFormat = format };
+            using var capture = new WasapiCapture(microphone, false, microphoneSignal == null ? 100 : 40) { WaveFormat = format };
+            // Device capture callbacks may deliver several RTP frames together, or stop
+            // during silence. The microphone sender supplies a continuous 8 kHz clock.
+            var micQueue = microphoneSignal == null ? null : new BufferedWaveProvider(format)
+            {
+                BufferDuration = TimeSpan.FromMilliseconds(240),
+                DiscardOnBufferOverflow = true,
+                ReadFully = true
+            };
             capture.DataAvailable += (_, e) =>
             {
-                for (int offset = 0; offset + 1 < e.BytesRecorded;)
-                {
-                    int count = Math.Min(160, (e.BytesRecorded - offset) / 2);
-                    var payload = new byte[count];
-                    bool audible = false;
-                    for (int i = 0; i < count; i++, offset += 2)
-                    {
-                        var sample = BitConverter.ToInt16(e.Buffer, offset);
-                        audible |= Math.Abs((int)sample) > 128;
-                        payload[i] = MuLawEncoder.LinearToMuLawSample(sample);
-                    }
-                    peer.SendAudio((uint)count, payload);
-                    if (audible) activity?.SentSpeech();
-                }
+                if (micQueue == null) SendPcm(e.Buffer, e.BytesRecorded);
+                else micQueue.AddSamples(e.Buffer, 0, e.BytesRecorded);
             };
             capture.RecordingStopped += (_, e) => ended.TrySetException(e.Exception ?? new IOException("Audio capture stopped."));
             capture.StartRecording();
             captureReady?.Invoke();
-            await await Task.WhenAny(events, ended.Task.WaitAsync(token));
+            if (micQueue == null)
+                await await Task.WhenAny(events, ended.Task.WaitAsync(token));
+            else
+            {
+                using var sending = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var sender = SendMicrophone(micQueue, sending.Token);
+                try { await await Task.WhenAny(sender, events, ended.Task); }
+                finally
+                {
+                    sending.Cancel();
+                    try { await sender; } catch (OperationCanceledException) when (sending.IsCancellationRequested) { }
+                }
+            }
         }
         finally
         {
             eventsLifetime.Cancel();
             resume.TrySetCanceled();
             try { await events; } catch { /* Preserve the original result. */ }
+        }
+
+        async Task SendMicrophone(BufferedWaveProvider queue, CancellationToken ct)
+        {
+            const int frameMs = 20;
+            var pcm = new byte[format.AverageBytesPerSecond * frameMs / 1000];
+            var clock = Stopwatch.StartNew();
+            long due = 40; // Buffer the first capture callback before sending starts.
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                int delay = (int)Math.Max(0, due - clock.ElapsedMilliseconds);
+                if (delay > 0) await Task.Delay(delay, ct);
+                ct.ThrowIfCancellationRequested();
+                queue.Read(pcm, 0, pcm.Length); // ReadFully pads capture gaps with PCM silence.
+                SendPcm(pcm, pcm.Length);
+                long now = clock.ElapsedMilliseconds;
+                due = now - due >= frameMs ? now + frameMs : due + frameMs;
+            }
+        }
+
+        void SendPcm(byte[] pcm, int length)
+        {
+            for (int offset = 0; offset + 1 < length;)
+            {
+                int count = Math.Min(160, (length - offset) / 2);
+                var payload = new byte[count];
+                bool audible = false;
+                for (int i = 0; i < count; i++, offset += 2)
+                {
+                    var sample = BitConverter.ToInt16(pcm, offset);
+                    audible |= Math.Abs((int)sample) > 128;
+                    payload[i] = MuLawEncoder.LinearToMuLawSample(sample);
+                }
+                peer.SendAudio((uint)count, payload);
+                if (audible) microphoneSignal?.SentSpeech();
+            }
         }
 
         async Task ReadEvents()
@@ -150,6 +196,16 @@ internal static class CodexVoice
                 var message = await server.NextEvent(eventsLifetime.Token);
                 if (!message.TryGetProperty("method", out var method) || !message.TryGetProperty("params", out var p) ||
                     !p.TryGetProperty("threadId", out var id) || id.GetString() != threadId) continue;
+                if (microphoneSignal != null && method.GetString() is ("thread/realtime/transcript/delta" or "thread/realtime/transcript/done") &&
+                    p.TryGetProperty("role", out var role) && role.GetString() == "user" &&
+                    (p.TryGetProperty("delta", out var transcript) || p.TryGetProperty("text", out transcript)) &&
+                    !string.IsNullOrWhiteSpace(transcript.GetString()))
+                    microphoneSignal.RecognizedSpeech();
+                if (microphoneSignal != null && method.GetString() == "thread/realtime/item/completed" &&
+                    p.TryGetProperty("item", out var item) && item.TryGetProperty("type", out var kind) &&
+                    kind.GetString() == "transcriptSegment" && item.GetProperty("role").GetString() == "user" &&
+                    !string.IsNullOrWhiteSpace(item.GetProperty("text").GetString()))
+                    microphoneSignal.RecognizedSpeech();
                 if (method.GetString() == "thread/realtime/sdp")
                 {
                     var result = peer.setRemoteDescription(new RTCSessionDescriptionInit { type = RTCSdpType.answer, sdp = p.GetProperty("sdp").GetString() });

@@ -134,7 +134,7 @@ internal sealed class Routing
                 using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 if (physicalOutput.ID == send.ID)
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
-                outgoingStream = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error));
+                outgoingStream = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error), physicalMicrophone: true);
                 translations.Add(outgoingStream);
                 recorder = virtualMic;
                 recordingId = virtualMic.ID;
