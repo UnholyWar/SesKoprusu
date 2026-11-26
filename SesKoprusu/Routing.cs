@@ -69,7 +69,7 @@ internal sealed class Routing
         return device;
     }
 
-    public void Enable(string incoming, string outgoing, string incomingVoice, string outgoingVoice, string key, System.Net.Http.HttpClient http, Action<string> failed)
+    public void Enable(string incoming, string outgoing, string incomingVoice, string outgoingVoice, Action<string> failed)
     {
         if (Pending) throw new InvalidOperationException("Restore the previous devices first.");
         var flows = new List<DataFlow>();
@@ -87,7 +87,7 @@ internal sealed class Routing
                 var virtualMic = Hold(Cable(DataFlow.Capture, "CABLE-A Output"));
                 var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Communications).Id));
                 if (mic.ID == virtualMic.ID || mic.FriendlyName.StartsWith("CABLE Output", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Select your physical microphone first.");
-                translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, key, http, failed));
+                translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, failed));
                 recordingId = virtualMic.ID;
             }
             if (incoming != Original)
@@ -99,7 +99,7 @@ internal sealed class Routing
                 if (speakers.ID == renderId) throw new InvalidOperationException("Select your physical speakers as the default output first.");
                 if (incoming == Monitor && outgoing == Monitor) recordingId = input.ID;
                 if (Translates(incoming))
-                    translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, key, http, failed));
+                    translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, failed));
                 else
                 {
                     capture = new WasapiCapture(input);

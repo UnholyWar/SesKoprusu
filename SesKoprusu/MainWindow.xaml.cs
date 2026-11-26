@@ -1,9 +1,5 @@
 using System.ComponentModel;
-using System.IO;
-using System.Media;
 using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,7 +8,8 @@ namespace SesKoprusu;
 
 public partial class MainWindow : Window
 {
-    static readonly string[] Voices = ["marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
+    bool updatingVoices;
+    bool catalogLoaded;
     readonly Routing routing = new();
     readonly Mutex instance = new(false, @"Local\SesKoprusu.Audio");
     readonly HttpClient http = new();
@@ -22,8 +19,6 @@ public partial class MainWindow : Window
     bool signedIn;
     bool busy;
     static readonly string[] Languages = ["Pass through", "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese", Routing.Original];
-    string SpeechKey => Key.Password.Length > 0 ? Key.Password.Trim() : Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
-    bool HasSpeechKey => !string.IsNullOrWhiteSpace(SpeechKey);
     bool connected;
     bool cliFound;
     CancellationTokenSource? loginAttempt;
@@ -36,10 +31,10 @@ public partial class MainWindow : Window
         Login.IsEnabled = ready && !busy && !signedIn;
         Reconnect.IsEnabled = ready && !busy;
         Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
-        Preview.IsEnabled = ready && !busy && connected && HasSpeechKey;
+        Preview.IsEnabled = ready && !busy && connected;
         Voice.IsEnabled = SendVoice.IsEnabled = Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         Route.IsEnabled = ready && !busy && (routing.Pending || connected);
-        SpeechState.Text = HasSpeechKey ? "Audio API key provided." : "Enter your API key for translation and voice previews.";
+
     }
 
     async Task<bool> CheckSession()
@@ -59,6 +54,17 @@ public partial class MainWindow : Window
             await CodexSession.Ask("Reply with OK.", timeout.Token);
             connected = true;
             SessionState.Text = "●  Codex connected";
+            if (!catalogLoaded)
+            {
+                try
+                {
+                    var voices = await CodexVoice.Choices(timeout.Token);
+                    LoadVoices(voices);
+                    SpeechState.Text = "Voice output uses your signed-in Codex session.";
+                    catalogLoaded = true;
+                }
+                catch (Exception) { SpeechState.Text = "Voice list unavailable. Preview to check Codex realtime access."; }
+            }
         }
         catch (Exception ex) { SessionState.Text = signedIn ? "Session saved · Retry connection" : "○  Account status unavailable"; Status.Text = ex is OperationCanceledException ? "The connection test timed out." : ex.Message; }
         finally { UpdateControls(); }
@@ -85,7 +91,7 @@ public partial class MainWindow : Window
         finally { busy = false; UpdateControls(); }
     }
 
-    void KeyChanged(object sender, RoutedEventArgs e) { if (ready) UpdateControls(); }
+
 
     void VerificationClick(object sender, RoutedEventArgs e)
     {
@@ -170,17 +176,7 @@ public partial class MainWindow : Window
             }
         }
         catch (Exception ex) { Status.Text = ex.Message; }
-        Voice.ItemsSource = SendVoice.ItemsSource = Voices;
-        Voice.SelectedIndex = SendVoice.SelectedIndex = 0;
-        try
-        {
-            if (Local.Has("voice") && Local.Read<string>("voice") is string voice && Voices.Contains(voice))
-                Voice.SelectedItem = voice;
-            SendVoice.SelectedItem = Voice.SelectedItem;
-            if (Local.Has("outgoingVoice") && Local.Read<string>("outgoingVoice") is string send && Voices.Contains(send))
-                SendVoice.SelectedItem = send;
-        }
-        catch (Exception ex) { Status.Text = ex.Message; }
+        LoadVoices([CodexVoice.Default]);
         try { routing.Restore(); } catch (Exception ex) { Status.Text = ex.Message; }
         Route.IsChecked = routing.Pending;
         ready = true;
@@ -258,9 +254,25 @@ public partial class MainWindow : Window
         catch (Exception ex) { Status.Text = ex.Message; }
     }
 
+    void LoadVoices(string[] voices)
+    {
+        updatingVoices = true;
+        try
+        {
+            Voice.ItemsSource = SendVoice.ItemsSource = voices;
+            Voice.SelectedIndex = SendVoice.SelectedIndex = 0;
+            if (Local.Has("voice") && Local.Read<string>("voice") is string incoming && voices.Contains(incoming))
+                Voice.SelectedItem = incoming;
+            if (Local.Has("outgoingVoice") && Local.Read<string>("outgoingVoice") is string outgoing && voices.Contains(outgoing))
+                SendVoice.SelectedItem = outgoing;
+        }
+        catch (Exception ex) { Status.Text = ex.Message; }
+        finally { updatingVoices = false; }
+    }
+
     void VoiceChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!ready) return;
+        if (!ready || updatingVoices) return;
         try { var box = (ComboBox)sender; Local.Save(box == Voice ? "voice" : "outgoingVoice", (string)box.SelectedItem); }
         catch (Exception ex) { Status.Text = "Could not save the voice preference. " + ex.Message; }
     }
@@ -287,9 +299,7 @@ public partial class MainWindow : Window
                 }
                 if (!await CheckSession()) return;
                 string incoming = (string)Incoming.SelectedItem, outgoing = (string)Outgoing.SelectedItem;
-                if ((Routing.Translates(incoming) || Routing.Translates(outgoing)) && !HasSpeechKey)
-                    throw new InvalidOperationException("Enter your audio API key in Codex Settings to translate.");
-                routing.Enable(incoming, outgoing, (string)Voice.SelectedItem, (string)SendVoice.SelectedItem, SpeechKey, http, error => Dispatcher.InvokeAsync(() =>
+                routing.Enable(incoming, outgoing, (string)Voice.SelectedItem, (string)SendVoice.SelectedItem, error => Dispatcher.InvokeAsync(() =>
                 {
                     try { routing.Restore(); Status.Text = error; }
                     catch (Exception ex) { Status.Text = ex.Message; }
@@ -304,35 +314,6 @@ public partial class MainWindow : Window
         finally { busy = false; Route.IsChecked = routing.Pending; UpdateControls(); }
     }
 
-    async Task<HttpResponseMessage> Post(string path, object body)
-    {
-        var key = SpeechKey;
-        if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("Enter your OpenAI API key in Codex Settings.");
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/" + path);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-        request.Content = JsonContent.Create(body);
-        var response = await http.SendAsync(request, lifetime.Token);
-        if (response.IsSuccessStatusCode) return response;
-        var code = response.StatusCode;
-        response.Dispose();
-        throw new HttpRequestException($"OpenAI request failed ({code}).");
-    }
-
-    async Task Speak(string text)
-    {
-        var voice = (string)Voice.SelectedItem;
-        for (int start = 0; start < text.Length;)
-        {
-            int length = Math.Min(1000, text.Length - start);
-            if (char.IsHighSurrogate(text[start + length - 1])) length--;
-            using var response = await Post("audio/speech", new { model = "gpt-4o-mini-tts", voice, input = text.Substring(start, length), response_format = "wav" });
-            using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync(lifetime.Token));
-            using var player = new SoundPlayer(stream);
-            await Task.Run(player.PlaySync, lifetime.Token);
-            start += length;
-        }
-    }
-
     async Task RunAudio(Func<Task> action)
     {
         busy = true;
@@ -344,7 +325,7 @@ public partial class MainWindow : Window
     }
 
     async void PreviewClick(object sender, RoutedEventArgs e) =>
-        await RunAudio(() => Speak("Merhaba, SesKöprüsü ile Türkçe ses örneğini dinliyorsunuz."));
+        await RunAudio(() => CodexVoice.Preview((string)Voice.SelectedItem, lifetime.Token));
 
     void OnClosing(object? sender, CancelEventArgs e)
     {

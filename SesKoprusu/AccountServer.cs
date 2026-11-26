@@ -8,9 +8,11 @@ internal sealed class AccountServer : IDisposable
 {
     readonly Process process;
     int sequence;
+    readonly Queue<JsonElement> pendingAudio = new();
+    bool streaming;
     AccountServer(Process child) => process = child;
 
-    public static async Task<AccountServer> Connect(CancellationToken token)
+    public static async Task<AccountServer> Connect(CancellationToken token, bool realtime = false)
     {
         var info = CodexSession.StartInfo();
         info.RedirectStandardInput = true;
@@ -23,7 +25,7 @@ internal sealed class AccountServer : IDisposable
         server.process.BeginErrorReadLine();
         try
         {
-            await server.Call("initialize", new { clientInfo = new { name = "seskoprusu", title = "SesKöprüsü", version = "1.0" }, capabilities = new { } }, token);
+            await server.Call("initialize", new { clientInfo = new { name = "seskoprusu", title = "SesKöprüsü", version = "1.0" }, capabilities = new { experimentalApi = realtime } }, token);
             await server.Send(new { method = "initialized" });
             return server;
         }
@@ -36,6 +38,9 @@ internal sealed class AccountServer : IDisposable
         await process.StandardInput.FlushAsync();
     }
 
+    internal Task<JsonElement> NextEvent(CancellationToken token) =>
+        pendingAudio.TryDequeue(out var item) ? Task.FromResult(item) : Read(token);
+
     async Task<JsonElement> Read(CancellationToken token)
     {
         var line = await process.StandardOutput.ReadLineAsync(token) ?? throw new IOException("App Server disconnected.");
@@ -43,14 +48,22 @@ internal sealed class AccountServer : IDisposable
         return json.RootElement.Clone();
     }
 
+    internal Task AppendAudio(string threadId, byte[] pcm) => Send(new { id = ++sequence, method = "thread/realtime/appendAudio", @params = new { threadId, audio = new { data = Convert.ToBase64String(pcm), sampleRate = 24000, numChannels = 1 } } });
+
     public async Task<JsonElement> Call(string method, object parameters, CancellationToken token)
     {
+        if (method == "thread/realtime/start") streaming = true;
         var id = ++sequence;
         await Send(new { id, method, @params = parameters });
         while (true)
         {
             var message = await Read(token);
-            if (!message.TryGetProperty("id", out var reply) || !reply.TryGetInt32(out var n) || n != id) continue;
+            if (!message.TryGetProperty("id", out var reply) || !reply.TryGetInt32(out var n) || n != id)
+            {
+                if (streaming && message.TryGetProperty("method", out var name) && name.GetString()?.StartsWith("thread/realtime/") == true)
+                    pendingAudio.Enqueue(message);
+                continue;
+            }
             if (message.TryGetProperty("error", out _)) throw new IOException($"App Server request failed ({method}). Check the Codex version and account permissions.");
             return message.GetProperty("result");
         }
@@ -91,8 +104,11 @@ internal sealed class AccountServer : IDisposable
         }
     }
 
+    bool closed;
     public void Dispose()
     {
+        if (closed) return;
+        closed = true;
         try { if (!process.HasExited) process.Kill(true); }
         finally { process.Dispose(); }
     }
