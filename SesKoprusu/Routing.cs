@@ -49,6 +49,8 @@ internal sealed class Routing
         };
     }
 
+    public static string MicrophoneCable(string incoming) => incoming == Original ? "CABLE" : "CABLE-A";
+
     public List<CableStatus> Inspect(string incoming, string outgoing)
     {
         var controllers = AudioControllers.Present();
@@ -59,7 +61,7 @@ internal sealed class Routing
             using var recording = FindCable(DataFlow.Capture, prefix + " Output", DeviceState.Active | DeviceState.Disabled | DeviceState.Unplugged);
             var description = prefix == "CABLE" ? "VB-Audio Virtual Cable" : "VB-Audio Cable A";
             bool present = controllers.Any(n => string.Equals(n, description, StringComparison.OrdinalIgnoreCase)) || playback != null || recording != null;
-            result.Add(new(prefix, prefix == "CABLE" ? incoming != Original : Translates(outgoing), present, playback?.State, recording?.State));
+            result.Add(new(prefix, (prefix == "CABLE" && incoming != Original) || (Translates(outgoing) && prefix == MicrophoneCable(incoming)), present, playback?.State, recording?.State));
         }
         return result;
     }
@@ -99,10 +101,14 @@ internal sealed class Routing
             string? renderId = null, recordingId = null;
             if (Translates(outgoing))
             {
-                var send = Hold(Cable(DataFlow.Render, "CABLE-A Input"));
-                var virtualMic = Hold(Cable(DataFlow.Capture, "CABLE-A Output"));
-                var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Communications).Id));
+                var prefix = MicrophoneCable(incoming);
+                var send = Hold(Cable(DataFlow.Render, prefix + " Input"));
+                var virtualMic = Hold(Cable(DataFlow.Capture, prefix + " Output"));
+                var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Multimedia).Id));
                 if (mic.ID == virtualMic.ID || mic.FriendlyName.StartsWith("CABLE Output", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Select your physical microphone first.");
+                using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                if (incoming == Original && physicalOutput.ID == send.ID)
+                    throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
                 translations.Add(new AudioTranslation(mic, send, outgoing, outgoingVoice, failed));
                 recordingId = virtualMic.ID;
             }

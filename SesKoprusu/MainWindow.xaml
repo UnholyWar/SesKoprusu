@@ -64,14 +64,13 @@
     <TextBlock x:Name="DeviceHint" TextWrapping="Wrap" Margin="0,3,0,10"/>
      </StackPanel></TabItem>
      <TabItem Header="Voice"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
-    <TextBlock Text="Speech and translation" Style="{StaticResource SectionTitle}"/>
+    <TextBlock Text="Interpreter voices" Style="{StaticResource SectionTitle}"/>
     <TextBlock x:Name="SpeechState" Text="Sign in to use Codex realtime voices." Foreground="#D2B4EF" TextWrapping="Wrap" Margin="0,3,0,8"/>
-    <TextBlock Text="Incoming translation voice" Margin="0,8,0,4"/>
-    <ComboBox x:Name="Voice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Incoming translation voice"/>
-    <TextBlock Text="Outgoing translation voice" Margin="0,12,0,4"/>
-    <ComboBox x:Name="SendVoice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Outgoing translation voice"/>
-    <Button Style="{StaticResource Primary}" x:Name="Preview" HorizontalAlignment="Left" Margin="0,14,0,0" Content="Preview incoming voice" Click="PreviewClick"/>
-
+    <TextBlock Text="Incoming · What you hear" Margin="0,8,0,4"/>
+    <DockPanel><Button x:Name="Preview" DockPanel.Dock="Right" Margin="8,0,0,0" Content="Preview" AutomationProperties.Name="Preview incoming voice" Click="PreviewClick"/><ComboBox x:Name="Voice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Incoming translation voice"/></DockPanel>
+    <TextBlock Text="Outgoing · What others hear" Margin="0,12,0,4"/>
+    <DockPanel><Button x:Name="PreviewSend" DockPanel.Dock="Right" Margin="8,0,0,0" Content="Preview" AutomationProperties.Name="Preview outgoing voice" Click="PreviewClick"/><ComboBox x:Name="SendVoice" SelectionChanged="VoiceChanged" AutomationProperties.Name="Outgoing translation voice"/></DockPanel>
+    <TextBlock x:Name="RecorderHint" Margin="0,14,0,0" TextWrapping="Wrap" Foreground="#D2B4EF"/>
      </StackPanel></TabItem>
      <TabItem Header="Updates"><StackPanel TextElement.FontWeight="Normal" TextElement.Foreground="#F3EAFF">
       <TextBlock Text="Application updates" Style="{StaticResource SectionTitle}"/>

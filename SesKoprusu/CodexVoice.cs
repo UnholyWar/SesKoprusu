@@ -92,7 +92,7 @@ internal static class CodexVoice
                 // Only one reader may consume App Server notifications. Pause the event pump
                 // after negotiation while issuing the preview request.
                 await negotiated.Task.WaitAsync(startup.Token);
-                await server.Call("thread/realtime/appendText", new { threadId, text = "Say exactly: Merhaba, SesKöprüsü ile Türkçe ses örneğini dinliyorsunuz." }, startup.Token);
+                await server.Call("thread/realtime/appendText", new { threadId, text = instructions }, startup.Token);
                 resume.TrySetResult();
                 while (true)
                 {
@@ -145,12 +145,12 @@ internal static class CodexVoice
         }
     }
 
-    public static async Task Preview(string voice, CancellationToken token)
+    public static async Task Preview(string voice, string language, CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(1));
         using var devices = new MMDeviceEnumerator();
         using var speakers = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-        await Run(voice, "Read the requested sample in Turkish, exactly once.", null, speakers, timeout.Token);
+        await Run(voice, $"Say the following sentence in {language}, once: Hello, this is my interpreter voice.", null, speakers, timeout.Token);
     }
 }

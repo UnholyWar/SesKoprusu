@@ -32,7 +32,7 @@ public partial class MainWindow : Window
         Login.IsEnabled = ready && !busy && !routing.Pending;
         Reconnect.IsEnabled = ready && !busy;
         Test.IsEnabled = ready && cliFound && (!busy || verificationUrl != null);
-        Preview.IsEnabled = ready && !busy && connected;
+        Preview.IsEnabled = PreviewSend.IsEnabled = ready && !busy && connected && !routing.Pending;
         Voice.IsEnabled = SendVoice.IsEnabled = Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         Route.IsEnabled = ready && !busy && (routing.Pending || connected);
 
@@ -194,7 +194,13 @@ public partial class MainWindow : Window
         bool open = Settings.Visibility == Visibility.Collapsed;
         Settings.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         HomePane.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        if (open) TryRefreshDrivers();
+        if (open)
+        {
+            TryRefreshDrivers();
+            RecorderHint.Text = Routing.Translates(OutgoingMode)
+                ? $"Recording input: {Routing.MicrophoneCable(IncomingMode)} Output. Turn on the bridge before opening Windows Sound Recorder."
+                : "To record your translated microphone, choose an outgoing language on the home screen.";
+        }
         Nav.Content = open ? "Back" : "Codex Settings";
     }
 
@@ -323,7 +329,9 @@ public partial class MainWindow : Window
                 }));
             }
             else routing.Restore();
-            Status.Text = routing.Pending ? "Audio bridge is on." : "Your previous devices have been restored.";
+            Status.Text = routing.Pending && Routing.Translates(OutgoingMode)
+                ? $"Translated microphone → {Routing.MicrophoneCable(IncomingMode)} Output. Open Windows Sound Recorder to record."
+                : routing.Pending ? "Audio bridge is on." : "Your previous devices have been restored.";
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { busy = false; Route.IsChecked = routing.Pending; UpdateControls(); }
@@ -339,8 +347,13 @@ public partial class MainWindow : Window
         finally { busy = false; UpdateControls(); }
     }
 
-    async void PreviewClick(object sender, RoutedEventArgs e) =>
-        await RunAudio(() => CodexVoice.Preview((string)Voice.SelectedItem, lifetime.Token));
+    async void PreviewClick(object sender, RoutedEventArgs e)
+    {
+        bool outgoing = sender == PreviewSend;
+        var voice = (string)(outgoing ? SendVoice : Voice).SelectedItem;
+        var target = outgoing ? OutgoingMode : IncomingMode;
+        await RunAudio(() => CodexVoice.Preview(voice, Routing.Translates(target) ? target : "Turkish", lifetime.Token));
+    }
 
     SetupUpdate? availableUpdate;
 
