@@ -1,6 +1,7 @@
 # SesKöprüsü
 
-**[Windows x64 kurulumunu indir / Download the Windows x64 installer (1.0.9)](https://github.com/UnholyWar/SesKoprusu/releases/download/setup-test-v1.0.9/SesKoprusu-Setup.exe)**  
+**[Windows x64 kurulumunu indir / Download the Windows x64 installer (1.0.9)](https://github.com/UnholyWar/SesKoprusu/releases/download/setup-test-v1.0.9/SesKoprusu-Setup.exe)**
+
 [Test sürümleri / Test releases](https://github.com/UnholyWar/SesKoprusu/releases) · [Türkçe](#türkçe) · [English](#english)
 
 ## Türkçe
