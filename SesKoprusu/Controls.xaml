@@ -83,6 +83,62 @@
     <SolidColorBrush x:Key="EdgeBrush" Color="#3C3549"/>
     <SolidColorBrush x:Key="MutedBrush" Color="#C4BCCE"/>
     <SolidColorBrush x:Key="AccentBrush" Color="#D2B9FF"/>
+    <Style x:Key="AudioLevelSlider" TargetType="Slider">
+        <Style.Resources>
+            <Style x:Key="AudioLevelTrack" TargetType="RepeatButton">
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RepeatButton">
+                            <Grid Background="Transparent">
+                                <Border Height="6" CornerRadius="3" Background="{TemplateBinding Background}"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Style.Resources>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Maximum" Value="100"/>
+        <Setter Property="SmallChange" Value="5"/>
+        <Setter Property="LargeChange" Value="10"/>
+        <Setter Property="TickFrequency" Value="5"/>
+        <Setter Property="IsSnapToTickEnabled" Value="True"/>
+        <Setter Property="IsMoveToPointEnabled" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Border x:Name="FocusRing" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="5">
+                        <Track x:Name="PART_Track">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Style="{StaticResource AudioLevelTrack}" Background="#B795F1"/>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="16" Height="16" Cursor="SizeWE">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border Background="#E5D5FF" BorderBrush="#9470CC" BorderThickness="1" CornerRadius="8"/>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Style="{StaticResource AudioLevelTrack}" Background="#4D435E"/>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="#CDA4F4"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value=".5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <FontFamily x:Key="InterfaceFont">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="DisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
 

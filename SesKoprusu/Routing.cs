@@ -12,6 +12,12 @@ internal sealed class Routing
     WasapiCapture? capture;
     WasapiOut? monitor;
     public bool Pending => Local.Has("routing");
+    public const int DefaultOriginalAudioLevel = 20;
+    volatile float originalAudioGain = DefaultOriginalAudioLevel / 100f;
+    volatile float microphoneMonitorGain;
+
+    public void SetOriginalAudioLevel(int percent) => originalAudioGain = Math.Clamp(percent, 0, 100) / 100f;
+    public void SetMicrophoneMonitorLevel(int percent) => microphoneMonitorGain = Math.Clamp(percent, 0, 100) / 100f;
 
     public const string HiFi = "Hi-Fi Cable";
     static string ControllerName(string cable) => cable == HiFi ? "VB-Audio Hi-Fi Cable" : "VB-Audio Virtual Cable";
@@ -146,6 +152,7 @@ internal sealed class Routing
     }
 
     readonly List<AudioTranslation> translations = new();
+    readonly List<LocalAudioMonitor> localMonitors = new();
     readonly List<MMDevice> endpoints = new();
 
     MMDevice Hold(MMDevice device)
@@ -154,7 +161,8 @@ internal sealed class Routing
         return device;
     }
 
-    public async Task EnableAsync(string incoming, string outgoing, string incomingVoice, string outgoingVoice, Action<string> failed, CancellationToken token)
+    public async Task EnableAsync(string incoming, string outgoing, string incomingVoice, string outgoingVoice,
+        Action<string> failed, Action<string> monitorFailed, CancellationToken token)
     {
         if (Pending) throw new InvalidOperationException("Restore the previous devices first.");
         var flows = new List<DataFlow>();
@@ -166,6 +174,7 @@ internal sealed class Routing
         try
         {
             string? renderId = null, recordingId = null;
+            MMDevice? physicalMicrophone = null, physicalSpeakers = null, originalInput = null;
             if (Translates(outgoing))
             {
                 var prefix = MicrophoneCable(incoming);
@@ -173,7 +182,7 @@ internal sealed class Routing
                 var virtualMic = Hold(Cable(DataFlow.Capture, prefix));
                 var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Multimedia).Id));
                 if (MatchesCable(mic, "CABLE", DataFlow.Capture) || MatchesCable(mic, HiFi, DataFlow.Capture)) throw new InvalidOperationException("Select your physical microphone first.");
-                using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                var physicalOutput = Hold(devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia));
                 if (MatchesCable(physicalOutput, "CABLE", DataFlow.Render) || MatchesCable(physicalOutput, HiFi, DataFlow.Render))
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
                 if (prefix == HiFi && CheckHiFiFormat(send, virtualMic) is { } issue)
@@ -182,6 +191,8 @@ internal sealed class Routing
                 translations.Add(outgoingStream);
                 recorder = virtualMic;
                 recordingId = virtualMic.ID;
+                physicalMicrophone = mic;
+                physicalSpeakers = physicalOutput;
             }
             if (RoutePlayback(incoming, outgoing))
             {
@@ -191,7 +202,11 @@ internal sealed class Routing
                 var speakers = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Render && e.Role == Role.Multimedia).Id));
                 if (MatchesCable(speakers, "CABLE", DataFlow.Render) || MatchesCable(speakers, HiFi, DataFlow.Render)) throw new InvalidOperationException("Select your physical speakers as the default output first.");
                 if (Translates(incoming))
+                {
                     translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, error => failed("Incoming audio: " + error)));
+                    originalInput = input;
+                    physicalSpeakers = speakers;
+                }
                 else
                 {
                     capture = new WasapiCapture(input);
@@ -219,8 +234,20 @@ internal sealed class Routing
             {
                 Set(e, e.Flow == DataFlow.Render ? renderId! : recordingId!);
             }
+            if (physicalSpeakers != null)
+            {
+                if (originalInput != null) StartMonitor(originalInput, physicalSpeakers, () => originalAudioGain, "Original incoming audio");
+                if (physicalMicrophone != null) StartMonitor(physicalMicrophone, physicalSpeakers, () => microphoneMonitorGain, "Microphone monitoring");
+            }
         }
         catch { Restore(); throw; }
+
+        void StartMonitor(MMDevice source, MMDevice destination, Func<float> gain, string name)
+        {
+            void Report(string error) => monitorFailed(name + ": " + error);
+            try { localMonitors.Add(new LocalAudioMonitor(source, destination, gain, Report)); }
+            catch (Exception ex) { Report(ex.Message); }
+        }
     }
 
     string DefaultId(DataFlow flow, Role role)
@@ -250,6 +277,8 @@ internal sealed class Routing
         if (errors.Count > 0) throw new AggregateException("Reconnect the devices and retry restoration.", errors);
         capture?.Dispose(); capture = null;
         monitor?.Dispose(); monitor = null;
+        foreach (var localMonitor in localMonitors) localMonitor.Dispose();
+        localMonitors.Clear();
         foreach (var translation in translations) translation.Dispose();
         translations.Clear();
         outgoingStream = null;

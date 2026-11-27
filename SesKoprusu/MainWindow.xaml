@@ -91,12 +91,34 @@
                             <Border Style="{StaticResource Card}">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
                                     <StackPanel Margin="0,0,8,0"><TextBlock Text="Incoming audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What you hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
                                     <ComboBox Grid.Column="1" x:Name="Incoming" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language to hear translated audio, or Keep original to hear the source." AutomationProperties.Name="Incoming target language"/>
-                                    <Border Grid.Row="1" Grid.ColumnSpan="2" Height="1" Margin="0,14" Background="{StaticResource EdgeBrush}"/>
-                                    <StackPanel Grid.Row="2" Margin="0,0,8,0"><TextBlock Text="Outgoing audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What others hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
-                                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Outgoing" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language for your microphone, or Keep original to send your own voice." AutomationProperties.Name="Outgoing target language"/>
+                                    <StackPanel x:Name="OriginalAudioControls" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,12,0,0" Visibility="Collapsed">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldLabel}"
+                                                       Foreground="{StaticResource AccentBrush}" Text="{Binding Value, ElementName=OriginalAudioLevel, StringFormat={}{0:0}%}"/>
+                                            <TextBlock Text="Original audio volume" Style="{StaticResource FieldLabel}"/>
+                                        </DockPanel>
+                                        <Slider x:Name="OriginalAudioLevel" Style="{StaticResource AudioLevelSlider}"
+                                                ValueChanged="MonitorLevelChanged" AutomationProperties.Name="Original incoming audio volume"/>
+                                        <TextBlock Text="Hear the original in real time alongside the translation." Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                    <Border Grid.Row="2" Grid.ColumnSpan="2" Height="1" Margin="0,14" Background="{StaticResource EdgeBrush}"/>
+                                    <StackPanel Grid.Row="3" Margin="0,0,8,0"><TextBlock Text="Outgoing audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What others hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
+                                    <ComboBox Grid.Row="3" Grid.Column="1" x:Name="Outgoing" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language for your microphone, or Keep original to send your own voice." AutomationProperties.Name="Outgoing target language"/>
+                                    <StackPanel x:Name="MicrophoneMonitorControls" Grid.Row="4" Grid.ColumnSpan="2" Margin="0,12,0,0" Visibility="Collapsed">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldLabel}"
+                                                       Foreground="{StaticResource AccentBrush}" Text="{Binding Value, ElementName=MicrophoneMonitorLevel, StringFormat={}{0:0}%}"/>
+                                            <TextBlock Text="Hear my microphone" Style="{StaticResource FieldLabel}"/>
+                                        </DockPanel>
+                                        <Slider x:Name="MicrophoneMonitorLevel" Style="{StaticResource AudioLevelSlider}"
+                                                ValueChanged="MonitorLevelChanged" AutomationProperties.Name="Microphone monitoring volume"/>
+                                        <TextBlock Text="Hear your own voice in your headphones." Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                             <Button Content="Getting started" Click="OpenGuideClick" HorizontalAlignment="Left"/>
@@ -106,7 +128,7 @@
                                 <StackPanel>
                                     <TextBlock Text="1. Connect your account" Style="{StaticResource Heading}"/>
                                     <TextBlock Style="{StaticResource Hint}" Text="Open Account and select Sign in with a device code. If Codex is missing, SesKöprüsü downloads it automatically from OpenAI’s GitHub releases."/>
-                                    <TextBlock Style="{StaticResource Hint}" Text="Sign in on the ChatGPT page that opens and enter the code shown in SesKöprüsü. If prompted, enable device-code sign-in in Account security and try again. Return here when the status says Codex connected."/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Sign in on the ChatGPT page that opens and enter the code shown in SesKöprüsü. If prompted, enable device-code sign-in in Account security and try again. Return here when the green Connected badge appears."/>
                                     <Button Content="Open Account" Click="GuideAccountClick" HorizontalAlignment="Left"/>
                                 </StackPanel>
                             </Border>
@@ -224,6 +246,28 @@
                                         <Button x:Name="UpdateButton" Style="{StaticResource Primary}" HorizontalAlignment="Left" Content="Check for updates" Click="UpdateClick"/>
                                     </StackPanel></Border>
                                 </TabItem>
+                                <TabItem Header="About">
+                                    <StackPanel>
+                                        <Border Style="{StaticResource Card}">
+                                            <StackPanel>
+                                                <TextBlock Text="Onur Ozgultekin" Style="{StaticResource Heading}"/>
+                                                <TextBlock Text="Developer" Style="{StaticResource Hint}"/>
+                                                <WrapPanel>
+                                                    <Button Content="LinkedIn ↗" Click="AboutLinkClick" Tag="https://www.linkedin.com/in/onur-ozgultekin"/>
+                                                    <Button Content="Personal website ↗" Click="AboutLinkClick" Tag="https://onurozgultekin.com/tr"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource Card}">
+                                            <StackPanel>
+                                                <TextBlock Text="SesKoprusu" Style="{StaticResource Heading}"/>
+                                                <TextBlock Text="Source code, releases, and issue tracking." Style="{StaticResource Hint}"/>
+                                                <Button Content="GitHub repository ↗" Click="AboutLinkClick" HorizontalAlignment="Left"
+                                                        Tag="https://github.com/UnholyWar/SesKoprusu"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </TabItem>
                             </TabControl>
                         </StackPanel>
                         </StackPanel>
@@ -238,7 +282,44 @@
                     </Border>
                 </StackPanel>
                 <Border Grid.Row="2" Padding="18,8" Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,1,0,0">
-                    <TextBlock x:Name="SessionState" Text="Checking Codex connection…" Style="{StaticResource Hint}" Margin="0" AutomationProperties.LiveSetting="Polite"/>
+                    <DockPanel>
+                        <Border x:Name="ConnectionBadge" DockPanel.Dock="Left" Margin="0,0,12,0" Padding="10,4"
+                                VerticalAlignment="Center" CornerRadius="12" BorderThickness="1">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#2A2731"/>
+                                    <Setter Property="BorderBrush" Value="#514A59"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                                            <Setter Property="Background" Value="#153127"/>
+                                            <Setter Property="BorderBrush" Value="#5BCD91"/>
+                                            <Setter Property="Effect">
+                                                <Setter.Value>
+                                                    <DropShadowEffect Color="#5BCD91" BlurRadius="12" ShadowDepth="0" Opacity="0.55"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock FontSize="12" FontWeight="SemiBold">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="● Not connected"/>
+                                        <Setter Property="Foreground" Value="#C4BDCE"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Tag, ElementName=ConnectionBadge}" Value="True">
+                                                <Setter Property="Text" Value="● Connected"/>
+                                                <Setter Property="Foreground" Value="#A5F4C7"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Border>
+                        <TextBlock x:Name="SessionState" Text="Checking Codex connection…" Style="{StaticResource Hint}"
+                                   Margin="0" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite"/>
+                    </DockPanel>
                 </Border>
             </Grid>
 

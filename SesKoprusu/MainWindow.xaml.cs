@@ -19,7 +19,8 @@ public partial class MainWindow : Window
     bool ready;
     bool signedIn;
     bool busy;
-    static readonly string[] Languages = ["Pass through", "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese", Routing.Original];
+    static readonly string[] Languages =
+        [Routing.Monitor, "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese", "Mandarin Chinese", Routing.Original];
     bool connected;
     bool cliFound;
     bool returnToGuide;
@@ -47,9 +48,15 @@ public partial class MainWindow : Window
             : "Open Codex Settings to connect your account.";
     }
 
+    void SetConnected(bool value)
+    {
+        connected = value;
+        ConnectionBadge.Tag = value;
+    }
+
     async Task<bool> CheckSession()
     {
-        connected = false;
+        SetConnected(false);
         try
         {
             cliFound = CodexSession.FindCli() != null;
@@ -63,8 +70,8 @@ public partial class MainWindow : Window
             timeout.CancelAfter(TimeSpan.FromSeconds(40));
             using var server = await AccountServer.Connect(timeout.Token);
             await server.Call("account/rateLimits/read", new { }, timeout.Token);
-            connected = true;
-            SessionState.Text = "Codex connected";
+            SetConnected(true);
+            SessionState.Text = "Your Codex session is ready.";
             if (!catalogLoaded)
             {
                 try
@@ -123,6 +130,7 @@ public partial class MainWindow : Window
     {
         if (busy) return;
         busy = true;
+        SetConnected(false);
         Status.Text = "";
         using var attempt = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         attempt.CancelAfter(TimeSpan.FromMinutes(20));
@@ -168,6 +176,11 @@ public partial class MainWindow : Window
     }
 
     void SecurityClick(object sender, RoutedEventArgs e) => OpenPage("https://chatgpt.com/#settings/Security");
+
+    void AboutLinkClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string url }) OpenPage(url);
+    }
 
     void OpenPage(string url)
     {
@@ -225,6 +238,11 @@ public partial class MainWindow : Window
             }
         }
         catch (Exception ex) { Status.Text = ex.Message; }
+        OriginalAudioLevel.Value = ReadMonitorLevel("originalAudioLevel", Routing.DefaultOriginalAudioLevel);
+        MicrophoneMonitorLevel.Value = ReadMonitorLevel("microphoneMonitorLevel", 0);
+        routing.SetOriginalAudioLevel((int)OriginalAudioLevel.Value);
+        routing.SetMicrophoneMonitorLevel((int)MicrophoneMonitorLevel.Value);
+        RefreshMonitorControls();
         LoadVoices([CodexVoice.Default]);
         try { routing.Restore(); } catch (Exception ex) { Status.Text = ex.Message; }
         Route.IsChecked = routing.Pending;
@@ -373,7 +391,33 @@ public partial class MainWindow : Window
     void LanguageChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ready) return;
+        RefreshMonitorControls();
         try { Local.Save("languages", new[] { (string)Incoming.SelectedItem, (string)Outgoing.SelectedItem }); }
+        catch (Exception ex) { Status.Text = ex.Message; }
+    }
+
+    void RefreshMonitorControls()
+    {
+        OriginalAudioControls.Visibility = Incoming.SelectedItem is string incoming && Routing.Translates(incoming)
+            ? Visibility.Visible : Visibility.Collapsed;
+        MicrophoneMonitorControls.Visibility = Outgoing.SelectedItem is string outgoing && Routing.Translates(outgoing)
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    int ReadMonitorLevel(string key, int fallback)
+    {
+        try { return Local.Has(key) ? Math.Clamp(Local.Read<int>(key), 0, 100) : fallback; }
+        catch (Exception ex) { Status.Text = ex.Message; return fallback; }
+    }
+
+    void MonitorLevelChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!ready) return;
+        int percent = (int)e.NewValue;
+        bool microphone = sender == MicrophoneMonitorLevel;
+        if (microphone) routing.SetMicrophoneMonitorLevel(percent);
+        else routing.SetOriginalAudioLevel(percent);
+        try { Local.Save(microphone ? "microphoneMonitorLevel" : "originalAudioLevel", percent); }
         catch (Exception ex) { Status.Text = ex.Message; }
     }
 
@@ -429,6 +473,9 @@ public partial class MainWindow : Window
                     catch (Exception ex) { Status.Text = ex.Message; }
                     Route.IsChecked = routing.Pending;
                     UpdateControls();
+                }), warning => Dispatcher.InvokeAsync(() =>
+                {
+                    if (routing.Pending) Status.Text = warning;
                 }), lifetime.Token);
             }
             else routing.Restore();
