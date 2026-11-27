@@ -8,12 +8,13 @@ internal sealed class AudioTranslation : IDisposable
     readonly Task worker;
     readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public Task Ready => ready.Task;
-    public AudioLevels Levels { get; } = new();
+    public AudioLevels Levels { get; }
 
     public AudioTranslation(MMDevice source, MMDevice destination, string language, string voice, Action<string> failed,
         bool physicalMicrophone = false)
     {
         // The session owns these handles independently of routing rollback.
+        Levels = new AudioLevels($"{source.FriendlyName} → {language} → {destination.FriendlyName}");
         var inputId = source.ID;
         var outputId = destination.ID;
         worker = Task.Run(async () =>
@@ -45,15 +46,18 @@ internal sealed class AudioTranslation : IDisposable
     }
 }
 
-internal sealed class AudioLevels
+internal sealed class AudioLevels(string route)
 {
-    int original, translated;
+    int original, sent, translated;
+    public string Route { get; } = route;
 
     public void RecordOriginal(ReadOnlySpan<byte> pcm) => Record(ref original, pcm);
+    public void RecordSent(ReadOnlySpan<byte> pcm) => Record(ref sent, pcm);
     public void RecordTranslation(ReadOnlySpan<byte> pcm) => Record(ref translated, pcm);
 
-    public (double Original, double Translated) Read() =>
-        (Interlocked.Exchange(ref original, 0) / 32768d, Interlocked.Exchange(ref translated, 0) / 32768d);
+    public (double Original, double Sent, double Translated) Read() =>
+        (Interlocked.Exchange(ref original, 0) / 32768d, Interlocked.Exchange(ref sent, 0) / 32768d,
+         Interlocked.Exchange(ref translated, 0) / 32768d);
 
     static void Record(ref int maximum, ReadOnlySpan<byte> pcm)
     {

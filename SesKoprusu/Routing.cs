@@ -77,13 +77,29 @@ internal sealed class Routing
     static bool RoutePlayback(string incoming, string outgoing) =>
         Translates(incoming) || (incoming == Monitor && !Translates(outgoing));
 
+    internal record MicrophoneOption(string? Id, string Name);
+    public string? SelectedMicrophoneId { get; set; }
+
+    public List<MicrophoneOption> Microphones()
+    {
+        var options = new List<MicrophoneOption> { new(null, "Windows default") };
+        foreach (var endpoint in devices.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+        {
+            using var mic = endpoint;
+            if (!MatchesCable(mic, "CABLE", DataFlow.Capture) && !MatchesCable(mic, HiFi, DataFlow.Capture))
+                options.Add(new(mic.ID, mic.FriendlyName));
+        }
+        return options;
+    }
+
     public string MicrophoneName()
     {
         try
         {
             var original = Pending ? Local.Read<Endpoint[]>("routing").FirstOrDefault(e =>
                 e.Flow == DataFlow.Capture && e.Role == Role.Multimedia) : null;
-            using var mic = original == null ? devices.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia) : devices.GetDevice(original.Id);
+            var id = SelectedMicrophoneId ?? original?.Id;
+            using var mic = id == null ? devices.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia) : devices.GetDevice(id);
             return mic.FriendlyName;
         }
         catch (COMException) { return "Unavailable · select a microphone in Windows Sound"; }
@@ -165,7 +181,9 @@ internal sealed class Routing
                 var prefix = MicrophoneCable(incoming);
                 var send = Hold(Cable(DataFlow.Render, prefix));
                 var virtualMic = Hold(Cable(DataFlow.Capture, prefix));
-                var mic = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Multimedia).Id));
+                var micId = SelectedMicrophoneId ?? saved.Single(e => e.Flow == DataFlow.Capture && e.Role == Role.Multimedia).Id;
+                var mic = Hold(devices.GetDevice(micId));
+                if (mic.State != DeviceState.Active) throw new InvalidOperationException("The selected microphone is unavailable. Choose a connected microphone in Devices.");
                 if (MatchesCable(mic, "CABLE", DataFlow.Capture) || MatchesCable(mic, HiFi, DataFlow.Capture)) throw new InvalidOperationException("Select your physical microphone first.");
                 using var physicalOutput = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 if (MatchesCable(physicalOutput, "CABLE", DataFlow.Render) || MatchesCable(physicalOutput, HiFi, DataFlow.Render))

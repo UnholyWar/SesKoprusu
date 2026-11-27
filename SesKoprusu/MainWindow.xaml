@@ -91,21 +91,22 @@
                             <Border Style="{StaticResource Card}">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
                                     <StackPanel Margin="0,0,8,0"><TextBlock Text="Incoming audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What you hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
                                     <ComboBox Grid.Column="1" x:Name="Incoming" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language to hear translated audio, or Keep original to hear the source." AutomationProperties.Name="Incoming target language"/>
-                                    <UniformGrid Grid.Row="1" Grid.ColumnSpan="2" Columns="2" Margin="0,8,0,0" x:Name="IncomingMeters" Visibility="Collapsed">
-                                        <StackPanel Margin="0,0,8,0"><TextBlock Text="Original" Style="{StaticResource Hint}"/><ProgressBar x:Name="IncomingOriginal" Height="5" Maximum="1" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Incoming original level"/></StackPanel>
-                                        <StackPanel><TextBlock Text="Translation" Style="{StaticResource Hint}"/><ProgressBar x:Name="IncomingTranslation" Height="5" Maximum="1" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Incoming translation level"/></StackPanel>
-                                    </UniformGrid>
-                                    <Border Grid.Row="2" Grid.ColumnSpan="2" Height="1" Margin="0,14" Background="{StaticResource EdgeBrush}"/>
-                                    <StackPanel Grid.Row="3" Margin="0,0,8,0"><TextBlock Text="Outgoing audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What others hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
-                                    <ComboBox Grid.Row="3" Grid.Column="1" x:Name="Outgoing" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language for your microphone, or Keep original to send your own voice." AutomationProperties.Name="Outgoing target language"/>
-                                    <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Columns="2" Margin="0,8,0,0" x:Name="OutgoingMeters" Visibility="Collapsed">
-                                        <StackPanel Margin="0,0,8,0"><TextBlock Text="Original" Style="{StaticResource Hint}"/><ProgressBar x:Name="OutgoingOriginal" Height="5" Maximum="1" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Outgoing original level"/></StackPanel>
-                                        <StackPanel><TextBlock Text="Translation" Style="{StaticResource Hint}"/><ProgressBar x:Name="OutgoingTranslation" Height="5" Maximum="1" Foreground="{StaticResource AccentBrush}" AutomationProperties.Name="Outgoing translation level"/></StackPanel>
-                                    </UniformGrid>
+                                    <Border Grid.Row="1" Grid.ColumnSpan="2" Height="1" Margin="0,14" Background="{StaticResource EdgeBrush}"/>
+                                    <StackPanel Grid.Row="2" Margin="0,0,8,0"><TextBlock Text="Outgoing audio" Style="{StaticResource FieldLabel}"/><TextBlock Text="What others hear" Style="{StaticResource Hint}" Margin="0"/></StackPanel>
+                                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Outgoing" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language for your microphone, or Keep original to send your own voice." AutomationProperties.Name="Outgoing target language"/>
                                 </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Audio routing log" Style="{StaticResource Heading}"/>
+                                    <TextBox x:Name="AudioLog" IsReadOnly="True" Height="110" Margin="0,8"
+                                             TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                             AutomationProperties.Name="Audio routing log"/>
+                                    <Button Content="Copy log" Click="CopyAudioLogClick" HorizontalAlignment="Left"/>
+                                </StackPanel>
                             </Border>
                             <Button Content="Getting started" Click="OpenGuideClick" HorizontalAlignment="Left"/>
                         </StackPanel>
@@ -186,6 +187,9 @@
                                     <StackPanel>
                                         <Border Style="{StaticResource Card}"><StackPanel>
                                             <TextBlock Text="Microphone route" Style="{StaticResource Heading}"/>
+                                            <TextBlock Text="Outgoing translation source" Style="{StaticResource FieldLabel}"/>
+                                            <ComboBox x:Name="MicrophoneSource" DisplayMemberPath="Name" SelectionChanged="MicrophoneSourceChanged"
+                                                      AutomationProperties.Name="Outgoing translation source"/>
                                             <TextBlock x:Name="MicPath" Margin="0,8,0,4" TextWrapping="Wrap"/>
                                             <WrapPanel><Button x:Name="MicSetup" Style="{StaticResource Primary}" Click="RepairClick" Visibility="Collapsed"/>
                                                 <Button Content="Windows sound settings ↗" Click="SoundSettingsClick"/></WrapPanel>

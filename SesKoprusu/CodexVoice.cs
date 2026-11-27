@@ -185,6 +185,7 @@ internal static class CodexVoice
                 }
                 peer.SendAudio((uint)count, payload);
             }
+            levels?.RecordSent(pcm.AsSpan(0, length));
         }
 
         async Task ReadEvents()

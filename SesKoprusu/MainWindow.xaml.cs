@@ -10,9 +10,13 @@ namespace SesKoprusu;
 public partial class MainWindow : Window
 {
     bool updatingVoices;
+    bool updatingMicrophoneSources;
+    const string MicrophoneSourceSetting = "microphoneSource";
     bool catalogLoaded;
     readonly Routing routing = new();
-    readonly DispatcherTimer meterTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    readonly Queue<string> audioLogLines = new();
+    AudioLevels? loggedIncoming, loggedOutgoing;
+    readonly DispatcherTimer audioLogTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     readonly Mutex instance = new(false, @"Local\SesKoprusu.Audio");
     readonly HttpClient http = new();
     readonly CancellationTokenSource lifetime = new();
@@ -39,9 +43,10 @@ public partial class MainWindow : Window
         Preview.IsEnabled = PreviewSend.IsEnabled = ready && !busy && connected && !routing.Pending;
         Voice.IsEnabled = SendVoice.IsEnabled = Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         bool active = routing.Pending;
-        bool showMeters = active && (routing.IncomingLevels != null || routing.OutgoingLevels != null);
-        meterTimer.IsEnabled = showMeters;
-        RefreshMeters();
+        MicrophoneSource.IsEnabled = ready && !active && !busy;
+        bool logActive = active && (routing.IncomingLevels != null || routing.OutgoingLevels != null);
+        audioLogTimer.IsEnabled = logActive;
+        RefreshAudioLog();
         Route.IsEnabled = ready && !busy && (active || connected);
         BridgeState.Text = active ? "Bridge on" : "Bridge off";
         BridgeHint.Text = active ? ActiveBridgeHint()
@@ -59,18 +64,42 @@ public partial class MainWindow : Window
         return $"In your call app, select CABLE Input as the speaker and {microphone} as the microphone.";
     }
 
-    void RefreshMeters()
+    void RefreshAudioLog()
     {
-        UpdateMeter(routing.IncomingLevels, IncomingMeters, IncomingOriginal, IncomingTranslation);
-        UpdateMeter(routing.OutgoingLevels, OutgoingMeters, OutgoingOriginal, OutgoingTranslation);
+        bool changed = LogAudioDirection("Incoming", routing.IncomingLevels, ref loggedIncoming);
+        changed |= LogAudioDirection("Outgoing", routing.OutgoingLevels, ref loggedOutgoing);
+        if (changed)
+        {
+            AudioLog.Text = string.Join(Environment.NewLine, audioLogLines);
+            AudioLog.ScrollToEnd();
+        }
     }
 
-    static void UpdateMeter(AudioLevels? levels, FrameworkElement meters, ProgressBar original, ProgressBar translation)
+    bool LogAudioDirection(string direction, AudioLevels? levels, ref AudioLevels? last)
     {
-        meters.Visibility = levels == null ? Visibility.Collapsed : Visibility.Visible;
-        var peaks = levels?.Read() ?? (Original: 0d, Translated: 0d);
-        original.Value = peaks.Original;
-        translation.Value = peaks.Translated;
+        bool changed = levels != last;
+        if (changed)
+            AppendAudioLog(direction, levels == null ? "Stopped" : levels.Route);
+        last = levels;
+        if (levels == null) return changed;
+        var peaks = levels.Read();
+        const double signalThreshold = 128d / 32768;
+        if (Math.Max(peaks.Original, Math.Max(peaks.Sent, peaks.Translated)) < signalThreshold) return changed;
+        AppendAudioLog(direction, $"Capture {peaks.Original:P1} | Sent to AI {peaks.Sent:P1} | AI audio queued to output {peaks.Translated:P1}");
+        return true;
+    }
+
+    void AppendAudioLog(string direction, string message)
+    {
+        if (audioLogLines.Count >= 240) audioLogLines.Dequeue();
+        audioLogLines.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {direction} | {message}");
+    }
+
+    void CopyAudioLogClick(object sender, RoutedEventArgs e)
+    {
+        if (audioLogLines.Count == 0) return;
+        try { Clipboard.SetText(AudioLog.Text); }
+        catch (System.Runtime.InteropServices.ExternalException ex) { Status.Text = ex.Message; }
     }
 
     async Task<bool> CheckSession()
@@ -231,7 +260,7 @@ public partial class MainWindow : Window
             return;
         }
         UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)}";
-        meterTimer.Tick += (_, _) => RefreshMeters();
+        audioLogTimer.Tick += (_, _) => RefreshAudioLog();
         Incoming.ItemsSource = Outgoing.ItemsSource = Languages;
         Incoming.SelectedIndex = Outgoing.SelectedIndex = 0;
         try
@@ -249,6 +278,12 @@ public partial class MainWindow : Window
         LoadVoices([CodexVoice.Default]);
         try { routing.Restore(); } catch (Exception ex) { Status.Text = ex.Message; }
         Route.IsChecked = routing.Pending;
+        try
+        {
+            if (Local.Has(MicrophoneSourceSetting))
+                routing.SelectedMicrophoneId = Local.Read<string>(MicrophoneSourceSetting);
+        }
+        catch (Exception ex) { Status.Text = ex.Message; }
         ready = true;
         UpdateControls();
         if (!Local.Has("onboarding")) ShowPage(GuidePane);
@@ -283,7 +318,7 @@ public partial class MainWindow : Window
         returnToGuide = GuidePane.IsVisible;
         ShowPage(Settings);
         if (tab != null) tab.IsSelected = true;
-        TryRefreshDrivers();
+        TryRefreshDrivers(refreshSources: true);
         RecorderHint.Text = Routing.Translates(OutgoingMode)
             ? $"Recording input: {Routing.MicrophoneCable(IncomingMode)} Output. Turn on the bridge before opening Windows Sound Recorder."
             : "To record your translated microphone, choose an outgoing language on the home screen.";
@@ -320,6 +355,24 @@ public partial class MainWindow : Window
 
     void SoundSettingsClick(object sender, RoutedEventArgs e) => OpenPage("ms-settings:sound");
 
+    void RefreshMicrophoneSources()
+    {
+        var sources = routing.Microphones();
+        var selected = sources.FirstOrDefault(source => source.Id == routing.SelectedMicrophoneId);
+        if (selected == null)
+        {
+            selected = new(routing.SelectedMicrophoneId, "Previously selected microphone (unavailable)");
+            sources.Add(selected);
+        }
+        updatingMicrophoneSources = true;
+        try
+        {
+            MicrophoneSource.ItemsSource = sources;
+            MicrophoneSource.SelectedItem = selected;
+        }
+        finally { updatingMicrophoneSources = false; }
+    }
+
     void RefreshDrivers()
     {
         var inventory = routing.Inspect(IncomingMode, OutgoingMode);
@@ -347,7 +400,20 @@ public partial class MainWindow : Window
             "Driver registration requires Windows administrator approval.";
     }
 
-    void RefreshDevicesClick(object sender, RoutedEventArgs e) => TryRefreshDrivers();
+    void MicrophoneSourceChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ready || updatingMicrophoneSources || MicrophoneSource.SelectedItem is not Routing.MicrophoneOption selected) return;
+        routing.SelectedMicrophoneId = selected.Id;
+        try
+        {
+            if (selected.Id == null) Local.Delete(MicrophoneSourceSetting);
+            else Local.Save(MicrophoneSourceSetting, selected.Id);
+        }
+        catch (Exception ex) { Status.Text = ex.Message; }
+        TryRefreshDrivers();
+    }
+
+    void RefreshDevicesClick(object sender, RoutedEventArgs e) => TryRefreshDrivers(refreshSources: true);
 
     async void RepairClick(object sender, RoutedEventArgs e)
     {
@@ -377,9 +443,14 @@ public partial class MainWindow : Window
         finally { Transfer.Visibility = Visibility.Collapsed; busy = false; UpdateControls(); TryRefreshDrivers(); }
     }
 
-    void TryRefreshDrivers()
+    void TryRefreshDrivers(bool refreshSources = false)
     {
-        try { RefreshDrivers(); } catch (Exception ex) { DriverState.ItemsSource = null; DeviceHint.Text = ex.Message; MicPath.Text = "Microphone status unavailable."; MicSetup.Visibility = ImportPackage.Visibility = Repair.Visibility = Visibility.Collapsed; }
+        try
+        {
+            if (refreshSources) RefreshMicrophoneSources();
+            RefreshDrivers();
+        }
+        catch (Exception ex) { DriverState.ItemsSource = null; DeviceHint.Text = ex.Message; MicPath.Text = "Microphone status unavailable."; MicSetup.Visibility = ImportPackage.Visibility = Repair.Visibility = Visibility.Collapsed; }
     }
 
     void LanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -502,7 +573,7 @@ public partial class MainWindow : Window
         if (!ownsInstance) return;
         try { routing.Restore(); }
         catch (Exception ex) { Status.Text = ex.Message; e.Cancel = true; return; }
-        meterTimer.Stop();
+        audioLogTimer.Stop();
         lifetime.Cancel();
         instance.ReleaseMutex();
         instance.Dispose();
