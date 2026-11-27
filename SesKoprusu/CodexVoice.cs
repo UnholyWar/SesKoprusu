@@ -3,7 +3,6 @@ using System.IO;
 using NAudio.Codecs;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using SIPSorcery.Net;
 using SIPSorceryMedia.Abstractions;
 
@@ -20,7 +19,9 @@ internal static class CodexVoice
         return [Default, .. catalog.GetProperty("voices").GetProperty("v3").EnumerateArray().Select(x => x.GetString()!)];
     }
 
-    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers, CancellationToken token, Action? captureReady = null, bool physicalMicrophone = false, AudioLevels? levels = null)
+    public static async Task Run(string voice, string instructions, MMDevice? microphone, MMDevice speakers,
+        CancellationToken token, Action? captureReady = null, bool physicalMicrophone = false,
+        AudioLevels? levels = null)
     {
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
         startup.CancelAfter(TimeSpan.FromSeconds(45));
@@ -41,27 +42,8 @@ internal static class CodexVoice
         };
         var format = new WaveFormat(8000, 16, 1);
         var buffer = new BufferedWaveProvider(format) { DiscardOnBufferOverflow = true, ReadFully = true };
-        var original = microphone == null ? null : new BufferedWaveProvider(format)
-        {
-            BufferDuration = TimeSpan.FromMilliseconds(240),
-            DiscardOnBufferOverflow = true,
-            ReadFully = true
-        };
         using var player = new WasapiOut(speakers, AudioClientShareMode.Shared, false, 80);
-        if (original == null)
-        {
-            player.Init(buffer);
-        }
-        else
-        {
-            // Leave headroom for overlapping speech on this direction's output only.
-            var mixer = new MixingSampleProvider(new ISampleProvider[]
-            {
-                new VolumeSampleProvider(buffer.ToSampleProvider()) { Volume = 0.8f },
-                new VolumeSampleProvider(original.ToSampleProvider()) { Volume = 0.2f }
-            });
-            player.Init(new SampleToWaveProvider16(mixer));
-        }
+        player.Init(buffer);
         long lastSpeech = 0;
         peer.OnRtpPacketReceived += (_, media, packet) =>
         {
@@ -143,7 +125,6 @@ internal static class CodexVoice
             } : null;
             capture.DataAvailable += (_, e) =>
             {
-                original?.AddSamples(e.Buffer, 0, e.BytesRecorded);
                 levels?.RecordOriginal(e.Buffer.AsSpan(0, e.BytesRecorded));
                 if (micQueue == null) SendPcm(e.Buffer, e.BytesRecorded);
                 else micQueue.AddSamples(e.Buffer, 0, e.BytesRecorded);

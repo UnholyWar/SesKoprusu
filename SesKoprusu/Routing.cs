@@ -153,6 +153,8 @@ internal sealed class Routing
         if (RoutePlayback(incoming, outgoing)) flows.Add(DataFlow.Render);
         if (Translates(outgoing)) flows.Add(DataFlow.Capture);
         if (flows.Count == 0) throw new InvalidOperationException("Both directions use the original audio. No routing is needed.");
+        if (Translates(incoming) && !Translates(outgoing))
+            CheckIncomingOnlyMicrophone();
         var saved = (from flow in flows from role in Roles select new Endpoint(flow, role, DefaultId(flow, role))).ToArray();
         Local.Save("routing", saved);
         try
@@ -170,7 +172,8 @@ internal sealed class Routing
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
                 if (prefix == HiFi && CheckHiFiFormat(send, virtualMic) is { } issue)
                     throw new InvalidOperationException(issue);
-                var translation = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error), physicalMicrophone: true);
+                var translation = new AudioTranslation(mic, send, outgoing, outgoingVoice,
+                    error => failed("Outgoing microphone: " + error), physicalMicrophone: true);
                 translations.Add(translation);
                 OutgoingLevels = translation.Levels;
                 recordingId = virtualMic.ID;
@@ -184,7 +187,8 @@ internal sealed class Routing
                 if (MatchesCable(speakers, "CABLE", DataFlow.Render) || MatchesCable(speakers, HiFi, DataFlow.Render)) throw new InvalidOperationException("Select your physical speakers as the default output first.");
                 if (Translates(incoming))
                 {
-                    var translation = new AudioTranslation(input, speakers, incoming, incomingVoice, error => failed("Incoming audio: " + error));
+                    var translation = new AudioTranslation(input, speakers, incoming, incomingVoice,
+                        error => failed("Incoming audio: " + error));
                     translations.Add(translation);
                     IncomingLevels = translation.Levels;
                 }
@@ -217,6 +221,23 @@ internal sealed class Routing
             }
         }
         catch { Restore(); throw; }
+    }
+
+    void CheckIncomingOnlyMicrophone()
+    {
+        foreach (var role in Roles)
+        {
+            try
+            {
+                using var mic = devices.GetDefaultAudioEndpoint(DataFlow.Capture, role);
+                if (MatchesCable(mic, "CABLE", DataFlow.Capture))
+                    throw new InvalidOperationException("CABLE Output is capturing incoming audio. Choose your physical microphone in Windows Sound and in the call app.");
+            }
+            catch (COMException ex) when (ex.HResult == unchecked((int)0x80070490))
+            {
+                // Incoming translation also works when there is no default microphone.
+            }
+        }
     }
 
     string DefaultId(DataFlow flow, Role role)

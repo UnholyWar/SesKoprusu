@@ -44,11 +44,19 @@ public partial class MainWindow : Window
         RefreshMeters();
         Route.IsEnabled = ready && !busy && (active || connected);
         BridgeState.Text = active ? "Bridge on" : "Bridge off";
-        BridgeHint.Text = active ? "Turn off the bridge to change languages or restore your devices."
+        BridgeHint.Text = active ? ActiveBridgeHint()
             : busy ? "Please wait while the current operation finishes."
             : connected ? "Choose the languages below, then turn on the bridge."
             : signedIn ? "Open Account in Codex Settings to reconnect."
             : "Open Codex Settings to connect your account.";
+    }
+
+    string ActiveBridgeHint()
+    {
+        if (!Routing.Translates(IncomingMode))
+            return "Turn off the bridge to change languages or restore your devices.";
+        var microphone = Routing.Translates(OutgoingMode) ? "Hi-Fi Cable Output" : "your physical microphone";
+        return $"In your call app, select CABLE Input as the speaker and {microphone} as the microphone.";
     }
 
     void RefreshMeters()

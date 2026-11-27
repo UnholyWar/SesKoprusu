@@ -10,7 +10,8 @@ internal sealed class AudioTranslation : IDisposable
     public Task Ready => ready.Task;
     public AudioLevels Levels { get; } = new();
 
-    public AudioTranslation(MMDevice source, MMDevice destination, string language, string voice, Action<string> failed, bool physicalMicrophone = false)
+    public AudioTranslation(MMDevice source, MMDevice destination, string language, string voice, Action<string> failed,
+        bool physicalMicrophone = false)
     {
         // The session owns these handles independently of routing rollback.
         var inputId = source.ID;
