@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace SesKoprusu;
@@ -23,6 +22,8 @@ public partial class MainWindow : Window
     static readonly string[] Languages = ["Pass through", "Turkish", "English", "German", "French", "Spanish", "Arabic", "Russian", "Japanese", Routing.Original];
     bool connected;
     bool cliFound;
+    bool returnToGuide;
+    double guideOffset;
     CancellationTokenSource? loginAttempt;
     Uri? verificationUrl;
 
@@ -192,6 +193,7 @@ public partial class MainWindow : Window
     async void FirstRender(object? sender, EventArgs e)
     {
         ContentRendered -= FirstRender;
+        var launchDelay = Task.Delay(TimeSpan.FromSeconds(2.5));
         await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
         if (!IsLoaded) return;
         try { ownsInstance = instance.WaitOne(0); }
@@ -208,7 +210,7 @@ public partial class MainWindow : Window
             if (MicPath.IsVisible) { RefreshSignal(); signalTimer.Start(); }
             else signalTimer.Stop();
         };
-        UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)} · Test channel";
+        UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)}";
         Incoming.ItemsSource = Outgoing.ItemsSource = Languages;
         Incoming.SelectedIndex = Outgoing.SelectedIndex = 0;
         try
@@ -228,33 +230,58 @@ public partial class MainWindow : Window
         Route.IsChecked = routing.Pending;
         ready = true;
         UpdateControls();
+        if (!Local.Has("onboarding")) ShowPage(GuidePane);
+        await launchDelay;
+        if (!IsLoaded || lifetime.IsCancellationRequested) return;
         Workspace.Visibility = Visibility.Visible;
-        LaunchScreen.IsHitTestVisible = false;
-        if (SystemParameters.ClientAreaAnimation)
-        {
-            var reveal = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(350));
-            reveal.Completed += (_, _) => LaunchScreen.Visibility = Visibility.Collapsed;
-            LaunchScreen.BeginAnimation(OpacityProperty, reveal);
-        }
-        else LaunchScreen.Visibility = Visibility.Collapsed;
+        LaunchScreen.Visibility = Visibility.Collapsed;
         await RefreshSession();
     }
 
     void SettingsClick(object sender, RoutedEventArgs e)
     {
-        bool open = Settings.Visibility == Visibility.Collapsed;
-        Settings.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        HomePane.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        if (open)
+        if (GuidePane.IsVisible) FinishGuideClick(sender, e);
+        else if (Settings.IsVisible) ShowPage(returnToGuide ? GuidePane : HomePane);
+        else ShowSettings();
+    }
+
+    void ShowPage(FrameworkElement page)
+    {
+        if (GuidePane.IsVisible) guideOffset = PageScroll.VerticalOffset;
+        GuidePane.Visibility = page == GuidePane ? Visibility.Visible : Visibility.Collapsed;
+        HomePane.Visibility = page == HomePane ? Visibility.Visible : Visibility.Collapsed;
+        Settings.Visibility = page == Settings ? Visibility.Visible : Visibility.Collapsed;
+        PageTitle.Text = page == GuidePane ? "Getting started" : page == Settings ? "Codex settings" : "Audio bridge";
+        Nav.Content = page == GuidePane ? "Skip guide" : page == Settings
+            ? (returnToGuide ? "Back to guide" : "Back to bridge") : "Codex Settings";
+        PageScroll.ScrollToVerticalOffset(page == GuidePane ? guideOffset : 0);
+    }
+
+    void ShowSettings(TabItem? tab = null)
+    {
+        returnToGuide = GuidePane.IsVisible;
+        ShowPage(Settings);
+        if (tab != null) tab.IsSelected = true;
+        TryRefreshDrivers();
+        RecorderHint.Text = Routing.Translates(OutgoingMode)
+            ? $"Recording input: {Routing.MicrophoneCable(IncomingMode)} Output. Turn on the bridge before opening Windows Sound Recorder."
+            : "To record your translated microphone, choose an outgoing language on the home screen.";
+    }
+
+    void OpenGuideClick(object sender, RoutedEventArgs e) => ShowPage(GuidePane);
+    void GuideAccountClick(object sender, RoutedEventArgs e) => ShowSettings(AccountTab);
+    void GuideDevicesClick(object sender, RoutedEventArgs e) => ShowSettings(DeviceTab);
+    void GuideLanguagesClick(object sender, RoutedEventArgs e) => ShowPage(HomePane);
+
+    void FinishGuideClick(object sender, RoutedEventArgs e)
+    {
+        try
         {
-            TryRefreshDrivers();
-            RecorderHint.Text = Routing.Translates(OutgoingMode)
-                ? $"Recording input: {Routing.MicrophoneCable(IncomingMode)} Output. Turn on the bridge before opening Windows Sound Recorder."
-                : "To record your translated microphone, choose an outgoing language on the home screen.";
+            if (!Local.Has("onboarding")) Local.Save("onboarding", true);
         }
-        Nav.Content = open ? "Back to bridge" : "Codex Settings";
-        PageTitle.Text = open ? "Codex settings" : "Audio bridge";
-        PageScroll.ScrollToTop();
+        catch (Exception ex) { Status.Text = $"Could not save guide preference. {ex.Message}"; }
+        ShowPage(HomePane);
+        guideOffset = 0;
     }
 
     void Progress(string label, double? value)
@@ -388,8 +415,7 @@ public partial class MainWindow : Window
                 }
                 if (routing.Inspect(IncomingMode, OutgoingMode).FirstOrDefault(d => d.Required && !d.Ready) is { } unavailable)
                 {
-                    if (!Settings.IsVisible) SettingsClick(this, e);
-                    DeviceTab.IsSelected = true;
+                    ShowSettings(DeviceTab);
                     Status.Text = unavailable.FormatIssue ?? $"{unavailable.Name} is unavailable for routing in this session. See Devices for details.";
                     return;
                 }
