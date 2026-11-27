@@ -1,7 +1,7 @@
-name: Windows test setup
+name: Windows setup
 on:
   push:
-    branches: [test/ses-koprusu]
+    branches: [test/ses-koprusu, release/audio-monitor]
 permissions:
   contents: read
 jobs:
@@ -22,10 +22,18 @@ jobs:
         run: |
           $env:Path += ";$([Environment]::GetFolderPath('ProgramFilesX86'))\Inno Setup 6"
           ./setup/Build.ps1 -Version $env:BUILD_VERSION
-      - name: Publish test setup
+      - name: Publish Windows setup
         shell: pwsh
         run: |
+          # Existing installations use this prefix to find updates.
           $tag = "setup-test-v$env:BUILD_VERSION"
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) { exit 0 }
-          gh release create $tag setup/Output/SesKoprusu-Setup.exe --prerelease --target $env:GITHUB_SHA --title "SesKöprüsü $env:BUILD_VERSION (test)" --notes "Windows x64 setup for commit $env:GITHUB_SHA"
+          $title = "SesKöprüsü $env:BUILD_VERSION"
+          if ($env:GITHUB_REF_NAME -eq 'release/audio-monitor') {
+            $releaseFlags = @('--latest')
+          } else {
+            $releaseFlags = @('--prerelease')
+            $title += ' (test)'
+          }
+          gh release create $tag setup/Output/SesKoprusu-Setup.exe @releaseFlags --target $env:GITHUB_SHA --title $title --notes "Windows x64 setup for commit $env:GITHUB_SHA"
