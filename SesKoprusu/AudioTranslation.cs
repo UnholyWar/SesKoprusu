@@ -7,18 +7,8 @@ internal sealed class AudioTranslation : IDisposable
     readonly CancellationTokenSource stop = new();
     readonly Task worker;
     readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    internal sealed class Signal
-    {
-        long microphone, recognized, returned;
-        public void SentSpeech() => Interlocked.Exchange(ref microphone, Environment.TickCount64);
-        public void RecognizedSpeech() => Interlocked.Exchange(ref recognized, Environment.TickCount64);
-        public void ReceivedSpeech() => Interlocked.Exchange(ref returned, Environment.TickCount64);
-        public string Summary => $"Mic audio sent: {Age(Interlocked.Read(ref microphone))}   ·   Codex input transcript: {Age(Interlocked.Read(ref recognized))}\nCodex audio received: {Age(Interlocked.Read(ref returned))}";
-        static string Age(long tick) => tick == 0 ? "waiting" : $"{(Environment.TickCount64 - tick) / 1000}s ago";
-    }
-
-    public Signal Activity { get; } = new();
     public Task Ready => ready.Task;
+    public AudioLevels Levels { get; } = new();
 
     public AudioTranslation(MMDevice source, MMDevice destination, string language, string voice, Action<string> failed, bool physicalMicrophone = false)
     {
@@ -35,7 +25,7 @@ internal sealed class AudioTranslation : IDisposable
                 using var output = devices.GetDevice(outputId);
                 await CodexVoice.Run(voice,
                     $"Act as a simultaneous interpreter. As each phrase becomes intelligible, speak its full translation in {language}. Preserve meaning, names and questions. Translate questions instead of answering them. Skip greetings of your own, acknowledgements and filler sounds. Stay silent during silence or music.",
-                    input, output, token, () => ready.TrySetResult(), physicalMicrophone ? Activity : null);
+                    input, output, token, () => ready.TrySetResult(), physicalMicrophone, Levels);
             }
             catch (Exception ex)
             {
@@ -51,5 +41,30 @@ internal sealed class AudioTranslation : IDisposable
         stop.Cancel();
         ready.TrySetCanceled();
         _ = worker.ContinueWith(_ => stop.Dispose(), TaskScheduler.Default);
+    }
+}
+
+internal sealed class AudioLevels
+{
+    int original, translated;
+
+    public void RecordOriginal(ReadOnlySpan<byte> pcm) => Record(ref original, pcm);
+    public void RecordTranslation(ReadOnlySpan<byte> pcm) => Record(ref translated, pcm);
+
+    public (double Original, double Translated) Read() =>
+        (Interlocked.Exchange(ref original, 0) / 32768d, Interlocked.Exchange(ref translated, 0) / 32768d);
+
+    static void Record(ref int maximum, ReadOnlySpan<byte> pcm)
+    {
+        int peak = 0;
+        for (int i = 0; i + 1 < pcm.Length; i += 2)
+            peak = Math.Max(peak, Math.Abs((int)System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(pcm.Slice(i, 2))));
+
+        int previous;
+        do
+        {
+            previous = Volatile.Read(ref maximum);
+            if (peak <= previous) return;
+        } while (Interlocked.CompareExchange(ref maximum, peak, previous) != previous);
     }
 }

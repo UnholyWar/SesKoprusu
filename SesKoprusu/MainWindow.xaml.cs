@@ -12,6 +12,7 @@ public partial class MainWindow : Window
     bool updatingVoices;
     bool catalogLoaded;
     readonly Routing routing = new();
+    readonly DispatcherTimer meterTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     readonly Mutex instance = new(false, @"Local\SesKoprusu.Audio");
     readonly HttpClient http = new();
     readonly CancellationTokenSource lifetime = new();
@@ -38,6 +39,9 @@ public partial class MainWindow : Window
         Preview.IsEnabled = PreviewSend.IsEnabled = ready && !busy && connected && !routing.Pending;
         Voice.IsEnabled = SendVoice.IsEnabled = Incoming.IsEnabled = Outgoing.IsEnabled = !routing.Pending && !busy;
         bool active = routing.Pending;
+        bool showMeters = active && (routing.IncomingLevels != null || routing.OutgoingLevels != null);
+        meterTimer.IsEnabled = showMeters;
+        RefreshMeters();
         Route.IsEnabled = ready && !busy && (active || connected);
         BridgeState.Text = active ? "Bridge on" : "Bridge off";
         BridgeHint.Text = active ? "Turn off the bridge to change languages or restore your devices."
@@ -45,6 +49,20 @@ public partial class MainWindow : Window
             : connected ? "Choose the languages below, then turn on the bridge."
             : signedIn ? "Open Account in Codex Settings to reconnect."
             : "Open Codex Settings to connect your account.";
+    }
+
+    void RefreshMeters()
+    {
+        UpdateMeter(routing.IncomingLevels, IncomingMeters, IncomingOriginal, IncomingTranslation);
+        UpdateMeter(routing.OutgoingLevels, OutgoingMeters, OutgoingOriginal, OutgoingTranslation);
+    }
+
+    static void UpdateMeter(AudioLevels? levels, FrameworkElement meters, ProgressBar original, ProgressBar translation)
+    {
+        meters.Visibility = levels == null ? Visibility.Collapsed : Visibility.Visible;
+        var peaks = levels?.Read() ?? (Original: 0d, Translated: 0d);
+        original.Value = peaks.Original;
+        translation.Value = peaks.Translated;
     }
 
     async Task<bool> CheckSession()
@@ -204,13 +222,8 @@ public partial class MainWindow : Window
             Close();
             return;
         }
-        signalTimer.Tick += (_, _) => RefreshSignal();
-        MicPath.IsVisibleChanged += (_, _) =>
-        {
-            if (MicPath.IsVisible) { RefreshSignal(); signalTimer.Start(); }
-            else signalTimer.Stop();
-        };
         UpdateState.Text = $"Installed version {SetupUpdates.Current.ToString(3)}";
+        meterTimer.Tick += (_, _) => RefreshMeters();
         Incoming.ItemsSource = Outgoing.ItemsSource = Languages;
         Incoming.SelectedIndex = Outgoing.SelectedIndex = 0;
         try
@@ -298,15 +311,6 @@ public partial class MainWindow : Window
     string MicSetupCable => Routing.Translates(OutgoingMode) ? Routing.MicrophoneCable(IncomingMode) : Routing.MicrophoneCable(Routing.Original);
 
     void SoundSettingsClick(object sender, RoutedEventArgs e) => OpenPage("ms-settings:sound");
-
-    readonly System.Windows.Threading.DispatcherTimer signalTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
-
-    void RefreshSignal()
-    {
-        var reading = routing.MicrophoneSignal();
-        MicSignal.Visibility = reading == null ? Visibility.Collapsed : Visibility.Visible;
-        MicSignal.Text = reading ?? "";
-    }
 
     void RefreshDrivers()
     {
@@ -490,7 +494,7 @@ public partial class MainWindow : Window
         if (!ownsInstance) return;
         try { routing.Restore(); }
         catch (Exception ex) { Status.Text = ex.Message; e.Cancel = true; return; }
-        signalTimer.Stop();
+        meterTimer.Stop();
         lifetime.Cancel();
         instance.ReleaseMutex();
         instance.Dispose();

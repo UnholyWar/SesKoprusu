@@ -135,18 +135,10 @@ internal sealed class Routing
         }
     }
 
-    AudioTranslation? outgoingStream;
-    MMDevice? recorder;
-    public string? MicrophoneSignal()
-    {
-        if (outgoingStream == null || recorder == null) return null;
-        var summary = outgoingStream.Activity.Summary;
-        try { return $"{summary}\n{recorder.FriendlyName} · Windows peak: {recorder.AudioMeterInformation.MasterPeakValue:P0}"; }
-        catch (COMException) { return summary + "\nWindows level unavailable."; }
-    }
-
     readonly List<AudioTranslation> translations = new();
     readonly List<MMDevice> endpoints = new();
+    public AudioLevels? IncomingLevels { get; private set; }
+    public AudioLevels? OutgoingLevels { get; private set; }
 
     MMDevice Hold(MMDevice device)
     {
@@ -178,9 +170,9 @@ internal sealed class Routing
                     throw new InvalidOperationException("Choose your headphones as the Windows output before enabling microphone translation.");
                 if (prefix == HiFi && CheckHiFiFormat(send, virtualMic) is { } issue)
                     throw new InvalidOperationException(issue);
-                outgoingStream = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error), physicalMicrophone: true);
-                translations.Add(outgoingStream);
-                recorder = virtualMic;
+                var translation = new AudioTranslation(mic, send, outgoing, outgoingVoice, error => failed("Outgoing microphone: " + error), physicalMicrophone: true);
+                translations.Add(translation);
+                OutgoingLevels = translation.Levels;
                 recordingId = virtualMic.ID;
             }
             if (RoutePlayback(incoming, outgoing))
@@ -191,7 +183,11 @@ internal sealed class Routing
                 var speakers = Hold(devices.GetDevice(saved.Single(e => e.Flow == DataFlow.Render && e.Role == Role.Multimedia).Id));
                 if (MatchesCable(speakers, "CABLE", DataFlow.Render) || MatchesCable(speakers, HiFi, DataFlow.Render)) throw new InvalidOperationException("Select your physical speakers as the default output first.");
                 if (Translates(incoming))
-                    translations.Add(new AudioTranslation(input, speakers, incoming, incomingVoice, error => failed("Incoming audio: " + error)));
+                {
+                    var translation = new AudioTranslation(input, speakers, incoming, incomingVoice, error => failed("Incoming audio: " + error));
+                    translations.Add(translation);
+                    IncomingLevels = translation.Levels;
+                }
                 else
                 {
                     capture = new WasapiCapture(input);
@@ -252,8 +248,7 @@ internal sealed class Routing
         monitor?.Dispose(); monitor = null;
         foreach (var translation in translations) translation.Dispose();
         translations.Clear();
-        outgoingStream = null;
-        recorder = null;
+        IncomingLevels = OutgoingLevels = null;
         foreach (var endpoint in endpoints) endpoint.Dispose();
         endpoints.Clear();
         Local.Delete("routing");
