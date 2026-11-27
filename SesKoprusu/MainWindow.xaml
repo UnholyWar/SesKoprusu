@@ -18,8 +18,9 @@
 
     <Border BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1">
         <Grid>
-            <Grid.RowDefinitions><RowDefinition Height="62"/><RowDefinition/></Grid.RowDefinitions>
-            <Border Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,0,0,1">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+            <Border Height="62" Visibility="{Binding Visibility, ElementName=Workspace}"
+                    Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,0,0,1">
                 <DockPanel Margin="16,0,5,0">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
                         <Button Style="{StaticResource CaptionButton}" Click="MinimizeClick" AutomationProperties.Name="Minimize" ToolTip="Minimize">
@@ -50,7 +51,7 @@
                         </Button>
                     </StackPanel>
                     <!-- The unoccupied caption remains native draggable, including when maximized. -->
-                    <ContentControl Content="SesKöprüsü" ContentTemplate="{StaticResource Brand}" Width="90" Height="56" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Visibility, ElementName=Workspace}"
+                    <ContentControl Content="SesKöprüsü" ContentTemplate="{StaticResource Brand}" Width="90" Height="56" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                     HorizontalAlignment="Left" VerticalAlignment="Center" Focusable="False" IsHitTestVisible="False"/>
                 </DockPanel>
             </Border>
@@ -98,13 +99,63 @@
                                     <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Outgoing" VerticalAlignment="Center" SelectionChanged="LanguageChanged" ToolTip="Choose a language for your microphone, or Keep original to send your own voice." AutomationProperties.Name="Outgoing target language"/>
                                 </Grid>
                             </Border>
+                            <Button Content="Getting started" Click="OpenGuideClick" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <StackPanel x:Name="GuidePane" Visibility="Collapsed">
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="1. Connect your account" Style="{StaticResource Heading}"/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Open Account and select Sign in with a device code. If Codex is missing, SesKöprüsü downloads it automatically from OpenAI’s GitHub releases."/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Sign in on the ChatGPT page that opens and enter the code shown in SesKöprüsü. If prompted, enable device-code sign-in in Account security and try again. Return here when the status says Codex connected."/>
+                                    <Button Content="Open Account" Click="GuideAccountClick" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="2. Choose your languages" Style="{StaticResource Heading}"/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="On the bridge, Incoming audio controls the language you hear. Outgoing audio controls the language others hear from your microphone. Choose Keep original for any direction you want left unchanged."/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="After choosing, reopen Getting started to continue to the driver setup."/>
+                                    <Button Content="Choose languages" Click="GuideLanguagesClick" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="3. Set up audio devices" Style="{StaticResource Heading}"/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="In Devices, check the drivers marked Required. One-way translation uses VB-CABLE. Two-way translation also needs Hi-Fi Cable. Select the available setup button to use a local package or download it from VB-Audio. Approve the Windows administrator prompt and finish the installer."/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Refresh devices after installation. If Windows asks you to restart, restart and then refresh. If Hi-Fi Cable reports a format mismatch, set Hi-Fi Cable Input and Output to the same sample rate in Windows Sound, such as 48,000 Hz on both."/>
+                                    <Button Content="Open Devices" Click="GuideDevicesClick" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="4. Turn on the bridge" Style="{StaticResource Heading}"/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Start with your physical headphones or speakers and microphone selected in Windows Sound. Turn on the bridge and play a short clip to check incoming translation. For outgoing translation, select the recorder input shown in Devices in your call or recording app."/>
+                                    <TextBlock Style="{StaticResource Hint}" Text="Turn the bridge off when you’re done to restore your previous Windows sound devices."/>
+                                    <Button Content="Finish and open bridge" Click="FinishGuideClick" Style="{StaticResource Primary}" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                         <StackPanel x:Name="Settings" Visibility="Collapsed">
                             <TabControl BorderThickness="0" Background="Transparent" Padding="0,9,0,0" Foreground="#F6F2FA">
-                                <TabItem Header="Account">
+                                <TabItem x:Name="AccountTab" Header="Account">
                                     <Border Style="{StaticResource Card}"><StackPanel>
-                                        <TextBlock Text="ChatGPT account" Style="{StaticResource Heading}"/>
-                                        <TextBlock Text="Sign in through your browser. Your session is saved for the next launch." Style="{StaticResource Hint}"/>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="48" Height="48" Margin="0,0,12,0" Padding="10"
+                                                    VerticalAlignment="Top" Background="{StaticResource PageBrush}"
+                                                    BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1" CornerRadius="10">
+                                                <Image Source="Assets/ChatGPTLogo.png" Stretch="Uniform"
+                                                       RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="ChatGPT account" Style="{StaticResource Heading}"/>
+                                                <TextBlock Text="Sign in through your browser. Your session is saved for the next launch."
+                                                           Style="{StaticResource Hint}" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
                                         <WrapPanel>
                                             <Button x:Name="Login" Click="LoginClick" Content="Sign in with a device code" Style="{StaticResource Primary}"/>
                                             <Button x:Name="Test" Click="TestClick" Content="Refresh status"/>
@@ -191,11 +242,11 @@
                 </Border>
             </Grid>
 
-            <Grid x:Name="LaunchScreen" Grid.Row="1" Background="{StaticResource PageBrush}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
-                    <ContentControl Content="SesKöprüsü" Width="250" Height="156" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" HorizontalAlignment="Center" ContentTemplate="{StaticResource Brand}" Focusable="False"/>
-                    <TextBlock Text="Loading audio settings…" Style="{StaticResource Hint}" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                </StackPanel>
+            <Grid x:Name="LaunchScreen" Grid.RowSpan="2" Background="{StaticResource PageBrush}">
+                <ContentControl Content="SesKöprüsü" Width="250" Height="156"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                ContentTemplate="{StaticResource Brand}" Focusable="False"/>
             </Grid>
         </Grid>
     </Border>

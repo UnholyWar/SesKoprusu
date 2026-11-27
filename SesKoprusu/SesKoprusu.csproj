@@ -12,6 +12,7 @@
   <ItemGroup>
     <Resource Include="Assets/SesKoprusuLogo.png" />
     <Resource Include="Assets/SesKoprusu.ico" />
+    <Resource Include="Assets/ChatGPTLogo.png" />
   </ItemGroup>
 
   <ItemGroup><PackageReference Include="NAudio" Version="2.2.1" /></ItemGroup>
