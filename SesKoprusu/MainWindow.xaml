@@ -18,8 +18,9 @@
 
     <Border BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1">
         <Grid>
-            <Grid.RowDefinitions><RowDefinition Height="62"/><RowDefinition/></Grid.RowDefinitions>
-            <Border Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,0,0,1">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+            <Border Height="62" Visibility="{Binding Visibility, ElementName=Workspace}"
+                    Background="#19161F" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="0,0,0,1">
                 <DockPanel Margin="16,0,5,0">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
                         <Button Style="{StaticResource CaptionButton}" Click="MinimizeClick" AutomationProperties.Name="Minimize" ToolTip="Minimize">
@@ -50,7 +51,7 @@
                         </Button>
                     </StackPanel>
                     <!-- The unoccupied caption remains native draggable, including when maximized. -->
-                    <ContentControl Content="SesKöprüsü" ContentTemplate="{StaticResource Brand}" Width="90" Height="56" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Visibility, ElementName=Workspace}"
+                    <ContentControl Content="SesKöprüsü" ContentTemplate="{StaticResource Brand}" Width="90" Height="56" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                     HorizontalAlignment="Left" VerticalAlignment="Center" Focusable="False" IsHitTestVisible="False"/>
                 </DockPanel>
             </Border>
@@ -241,11 +242,11 @@
                 </Border>
             </Grid>
 
-            <Grid x:Name="LaunchScreen" Grid.Row="1" Background="{StaticResource PageBrush}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
-                    <ContentControl Content="SesKöprüsü" Width="250" Height="156" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" HorizontalAlignment="Center" ContentTemplate="{StaticResource Brand}" Focusable="False"/>
-                    <TextBlock Text="Loading audio settings…" Style="{StaticResource Hint}" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                </StackPanel>
+            <Grid x:Name="LaunchScreen" Grid.RowSpan="2" Background="{StaticResource PageBrush}">
+                <ContentControl Content="SesKöprüsü" Width="250" Height="156"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                ContentTemplate="{StaticResource Brand}" Focusable="False"/>
             </Grid>
         </Grid>
     </Border>
